@@ -1,2 +1,7 @@
 /target
 .env
+
+*.code-workspace
+.cache/
+.env.*
+!.env.example

@@ -1,0 +1,11 @@
+.git
+.github
+target
+.cache
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.code-workspace
+**/*.log

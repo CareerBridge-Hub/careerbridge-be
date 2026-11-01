@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod browsing;
 pub mod config;
 pub mod crypto;
 pub mod db;

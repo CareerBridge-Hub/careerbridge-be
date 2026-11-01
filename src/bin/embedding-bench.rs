@@ -21,6 +21,7 @@ fn peak_kib() -> u64 {
 }
 #[tokio::main(worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
     let cache = std::env::var("MODEL_CACHE_DIR").unwrap_or_else(|_| ".cache/fastembed".into());
     let start = Instant::now();
     let model = LocalEmbedding::load(cache).await?;
@@ -49,8 +50,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let b = Instant::now();
     let passages = model.embed(texts, EmbeddingKind::Passage).await?;
     let batch_ms = b.elapsed().as_millis();
-    let pool = if let Ok(url) = std::env::var("BENCH_DATABASE_URL") {
-        Some(sqlx::PgPool::connect(&url).await?)
+    let pool = if let Ok(url) = std::env::var("SUPABASE_DB_URL") {
+        Some(
+            careerbridge_be::infrastructure::db::connect_runtime_pool(
+                &url,
+                careerbridge_be::infrastructure::db::RuntimeRole::Api,
+            )
+            .await?,
+        )
     } else {
         None
     };
@@ -129,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     handle.stop(true).await;
     let address_space = rlimit::Resource::AS.get().ok().map(|limits| limits.0);
     let queue = json!({"requests":model.metrics.requests.load(Ordering::Relaxed),"totalQueueMicros":model.metrics.queue_micros.load(Ordering::Relaxed),"maxQueueMicros":model.metrics.max_queue_micros.load(Ordering::Relaxed),"totalInferenceMicros":model.metrics.inference_micros.load(Ordering::Relaxed)});
-    let report = json!({"model":model.version(),"startupMs":startup.as_millis(),"peakRssKiB":peak_kib(),"singleQueryTopKp95Ms":timings[94],"batch66Ms":batch_ms,"concurrent8WallMs":concurrent_ms,"queue":queue,"httpTraffic":{"requests":http_requests,"errors":http_errors},"topKBackend":if pool.is_some(){"PostgreSQL pgvector exact cosine Top-5"}else{"in-memory exact cosine over 66 seeded skills"},"environment":{"addressSpaceLimitBytes":address_space,"cpuAffinity":std::fs::read_to_string("/proc/self/status").ok().and_then(|s|s.lines().find(|s|s.starts_with("Cpus_allowed_list:")).map(str::to_owned)),"cpuMax":std::fs::read_to_string("/sys/fs/cgroup/cpu.max").ok(),"memoryMax":std::fs::read_to_string("/sys/fs/cgroup/memory.max").ok()},"targetsMet":peak_kib()<=1572864&&startup.as_secs_f64()<=30.0&&timings[94]<=500.0,"acceptanceNote":"Run twice for first-download vs cached startup. HTTP traffic shares this process with inference. Set BENCH_DATABASE_URL for PostgreSQL retrieval. Address-space limit is stricter than RSS; parent cgroup limits are also reported."});
+    let report = json!({"model":model.version(),"startupMs":startup.as_millis(),"peakRssKiB":peak_kib(),"singleQueryTopKp95Ms":timings[94],"batch66Ms":batch_ms,"concurrent8WallMs":concurrent_ms,"queue":queue,"httpTraffic":{"requests":http_requests,"errors":http_errors},"topKBackend":if pool.is_some(){"PostgreSQL pgvector exact cosine Top-5"}else{"in-memory exact cosine over 66 seeded skills"},"environment":{"addressSpaceLimitBytes":address_space,"cpuAffinity":std::fs::read_to_string("/proc/self/status").ok().and_then(|s|s.lines().find(|s|s.starts_with("Cpus_allowed_list:")).map(str::to_owned)),"cpuMax":std::fs::read_to_string("/sys/fs/cgroup/cpu.max").ok(),"memoryMax":std::fs::read_to_string("/sys/fs/cgroup/memory.max").ok()},"targetsMet":peak_kib()<=1572864&&startup.as_secs_f64()<=30.0&&timings[94]<=500.0,"acceptanceNote":"Run twice for first-download vs cached startup. HTTP traffic shares this process with inference. Set SUPABASE_DB_URL for PostgreSQL retrieval. Address-space limit is stricter than RSS; parent cgroup limits are also reported."});
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
 }

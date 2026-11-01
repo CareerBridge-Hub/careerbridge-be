@@ -1,0 +1,17 @@
+# Repository scans do not build images or require production credentials.
+timeout: 10m
+exit-code: 1
+severity:
+  - HIGH
+  - CRITICAL
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+  skip-dirs:
+    - .git
+    - target
+    - .cache
+    - .venv
+    - scripts

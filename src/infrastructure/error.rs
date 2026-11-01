@@ -12,6 +12,7 @@ impl ResponseError for AppError {
         match self {
             Self::Invalid(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::Busy => StatusCode::TOO_MANY_REQUESTS,
             Self::Provider => StatusCode::BAD_GATEWAY,
@@ -22,6 +23,7 @@ impl ResponseError for AppError {
         let code = match self {
             Self::Invalid(_) => "invalid_input",
             Self::Unauthorized => "unauthorized",
+            Self::Forbidden => "forbidden",
             Self::NotFound => "not_found",
             Self::Busy => "busy",
             Self::Provider => "provider_unavailable",

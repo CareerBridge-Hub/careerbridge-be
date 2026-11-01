@@ -96,6 +96,10 @@ impl FromRequest for Claims {
     type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let state = req.app_data::<web::Data<State>>().cloned();
+        let cookie_auth = req
+            .app_data::<web::Data<crate::presentation::session::CookieAuth>>()
+            .cloned();
+        let request = req.clone();
         let token = req
             .headers()
             .get("Authorization")
@@ -105,6 +109,15 @@ impl FromRequest for Claims {
             .map(str::to_owned);
         Box::pin(async move {
             let state = state.ok_or(AppError::Internal)?;
+            if let Some(auth) = cookie_auth {
+                if !matches!(request.method().as_str(), "GET" | "HEAD" | "OPTIONS") {
+                    auth.csrf(&request)?;
+                }
+                // Cookie authentication is mandatory in the production application.
+                return crate::presentation::session::resolve(&state, &request, &auth)
+                    .await
+                    .map(|(claims, _)| claims);
+            }
             state
                 .auth
                 .verify(&token.ok_or(AppError::Unauthorized)?)

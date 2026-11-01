@@ -2,9 +2,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
     pub id: Uuid,
@@ -12,13 +13,14 @@ pub struct Skill {
     pub kategori: String,
     pub alias: Vec<String>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobSkill {
     pub skill_id: Uuid,
+    #[schema(value_type = SkillRequirement)]
     pub tipe: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Occupation {
     pub id: Uuid,
@@ -28,36 +30,40 @@ pub struct Occupation {
     pub deskripsi: String,
     pub skills: Vec<JobSkill>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Institution {
     pub id: Uuid,
     pub nama: String,
+    #[schema(value_type = InstitutionType)]
     pub jenis: String,
     pub provinsi: String,
     pub kota: String,
     pub website: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Training {
     pub id: Uuid,
     pub institution_id: Uuid,
     pub nama: String,
-    pub biaya: i64,
-    pub moda: String,
+    /// Unknown source fee is null, not free.
+    #[schema(minimum = 0)]
+    pub biaya: Option<i64>,
+    #[schema(value_type = Option<DeliveryMode>)]
+    pub moda: Option<String>,
     pub durasi: String,
     pub url_daftar: String,
     pub skill_ids: Vec<Uuid>,
     pub sample: bool,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 pub struct Experience {
     pub posisi: String,
     pub tempat: String,
     pub periode: String,
 }
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ParsedCv {
     pub pendidikan: Vec<String>,
     pub pengalaman: Vec<Experience>,
@@ -79,13 +85,14 @@ impl ParsedCv {
                 .all(|s| s.posisi.len() <= 300 && s.tempat.len() <= 300 && s.periode.len() <= 100)
     }
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSkill {
     pub skill_id: Uuid,
+    #[schema(value_type = SkillSource)]
     pub sumber: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobMatch {
     pub job: Occupation,
@@ -149,7 +156,7 @@ pub fn aliases(skills: &[Skill]) -> HashMap<String, Uuid> {
         })
         .collect()
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RankedTraining {
     pub training: Training,
@@ -186,13 +193,13 @@ pub fn rank_trainings(trainings: &[Training], m: &JobMatch) -> Vec<RankedTrainin
                 (b.covers_wajib.len() + b.covers_opsional.len())
                     .cmp(&(a.covers_wajib.len() + a.covers_opsional.len()))
             })
-            .then_with(|| (a.training.biaya > 0).cmp(&(b.training.biaya > 0)))
+            .then_with(|| (a.training.biaya != Some(0)).cmp(&(b.training.biaya != Some(0))))
             .then_with(|| a.training.nama.cmp(&b.training.nama))
     });
     result
 }
 /// LLM prose never supplies arbitrary skill names: it chooses catalog IDs only.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplanationPlan {
     pub priority_skill_ids: Vec<Uuid>,
@@ -283,8 +290,8 @@ mod ranking_tests {
             id,
             institution_id: Uuid::new_v4(),
             nama: name.into(),
-            biaya: cost,
-            moda: "daring".into(),
+            biaya: Some(cost),
+            moda: Some("daring".into()),
             durasi: "1 hari".into(),
             url_daftar: "https://example.test".into(),
             skill_ids: ids,
@@ -353,4 +360,43 @@ mod ranking_tests {
         assert_eq!(index.get(&normalize("microsoft excel")), Some(&id));
         assert!(!index.contains_key("unknown"));
     }
+}
+
+#[derive(ToSchema)]
+pub enum Education {
+    #[serde(rename = "SMA")]
+    Sma,
+    #[serde(rename = "SMK")]
+    Smk,
+    D3,
+    D4,
+    S1,
+    S2,
+}
+#[derive(ToSchema)]
+pub enum InstitutionType {
+    #[serde(rename = "LPK")]
+    Lpk,
+    #[serde(rename = "BLK")]
+    Blk,
+    Platform,
+}
+#[derive(ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DeliveryMode {
+    Daring,
+    Luring,
+}
+#[derive(ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillSource {
+    Manual,
+    CvAlias,
+    CvSemantik,
+}
+#[derive(ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SkillRequirement {
+    Wajib,
+    Opsional,
 }

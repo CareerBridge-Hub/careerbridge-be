@@ -168,7 +168,7 @@ impl Modify for Security {
     paths(super::events::latest_cv,super::events::dismiss_cv,super::events::cv_events,super::events::start_analysis,super::events::analysis_events,super::session::login, super::session::register, super::session::session, super::session::logout, super::session::password, super::session::verify, super::http::health, super::http::ready, super::http::me,
         super::http::create_profile, super::http::update_profile, super::http::catalog,
         super::http::save_skills, super::http::target, super::http::upload,
-        super::http::cv_status, super::http::delete_cv, super::http::matches, super::http::summary, super::http::training_page, super::http::analysis),
+        super::http::cv_status, super::http::delete_cv, super::http::matches, super::http::summary, super::http::training_page, super::http::vacancies, super::http::analysis),
     components(schemas(ErrorResponse, CatalogKind)),
     modifiers(&Security)
 )]

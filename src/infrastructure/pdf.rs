@@ -23,16 +23,20 @@ impl CvTextExtractor for SubprocessPdf {
             .kill_on_drop(true)
             .spawn()
             .map_err(|_| AppError::Internal)?;
-        let mut stdin = child.stdin.take().ok_or(AppError::Internal)?;
-        stdin
-            .write_all(bytes)
-            .await
-            .map_err(|_| AppError::Invalid("PDF tidak dapat dibaca."))?;
-        drop(stdin);
-        let output = tokio::time::timeout(Duration::from_secs(15), child.wait_with_output())
-            .await
-            .map_err(|_| AppError::Invalid("PDF terlalu kompleks untuk diproses."))?
-            .map_err(|_| AppError::Invalid("PDF tidak dapat dibaca."))?;
+        let output = tokio::time::timeout(Duration::from_secs(15), async move {
+            let mut stdin = child.stdin.take().ok_or(AppError::Internal)?;
+            stdin
+                .write_all(bytes)
+                .await
+                .map_err(|_| AppError::Invalid("PDF tidak dapat dibaca."))?;
+            drop(stdin);
+            child
+                .wait_with_output()
+                .await
+                .map_err(|_| AppError::Invalid("PDF tidak dapat dibaca."))
+        })
+        .await
+        .map_err(|_| AppError::Invalid("PDF terlalu kompleks untuk diproses."))??;
         if !output.status.success() {
             return Err(AppError::Invalid(
                 "PDF tidak dapat dibaca atau terlalu kompleks.",

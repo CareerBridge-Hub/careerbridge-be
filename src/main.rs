@@ -44,6 +44,7 @@ async fn main() -> std::io::Result<()> {
         )
         .init();
     let c = Config::from_env()?;
+    let job_settings = careerbridge_be::infrastructure::jobs::Settings::from_env()?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(5))
@@ -70,6 +71,9 @@ async fn main() -> std::io::Result<()> {
             "Worker database role initialization failed; run migrations with SUPABASE_DB_URL first",
         )
     })?;
+    careerbridge_be::infrastructure::jobs::start(&c.database_url, job_settings)
+        .await
+        .map_err(std::io::Error::other)?;
     let embedding = LocalEmbedding::load(c.model_cache)
         .await
         .map_err(std::io::Error::other)?;

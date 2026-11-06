@@ -85,6 +85,7 @@ pub fn configure(c: &mut web::ServiceConfig) {
                 .route("/me/matches", web::get().to(matches))
                 .route("/me/summary", web::get().to(summary))
                 .route("/me/trainings", web::get().to(training_page))
+                .route("/me/vacancies", web::get().to(vacancies))
                 .route("/me/analysis/{id}", web::get().to(analysis)),
         );
 }
@@ -790,4 +791,17 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
     sqlx::query("INSERT INTO analyses(user_id,occupation_id,revision_key,result) SELECT $1,$2,$3,$4 WHERE EXISTS(SELECT 1 FROM users WHERE id=$1 AND revision=$5) AND EXISTS(SELECT 1 FROM catalog_revision WHERE revision=$6) ON CONFLICT(user_id,occupation_id) DO UPDATE SET revision_key=excluded.revision_key,result=excluded.result,created_at=now()").bind(a.sub).bind(id).bind(key).bind(&result).bind(revision).bind(catalog_revision).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(result)
+}
+
+#[utoipa::path(get,path="/api/v1/me/vacancies",summary="One page of published Indonesia software vacancies with application links",params(crate::infrastructure::jobs::VacancyQuery),responses((status=200,description="Items, total, offset and limit; each item includes applyUrl, sourceUrl, country, city and description",body=crate::infrastructure::jobs::VacancyPage),(status=400,body=ErrorResponse),(status=401,body=ErrorResponse)),security(("cookieAuth"=[])))]
+async fn vacancies(
+    s: web::Data<State>,
+    a: Claims,
+    p: web::Query<crate::infrastructure::jobs::VacancyQuery>,
+) -> Result<web::Json<Value>, AppError> {
+    p.validate()?;
+    db::active_tx(&s.pool, a.sub).await?.commit().await?;
+    Ok(web::Json(
+        crate::infrastructure::jobs::page(&s.pool, &p).await?,
+    ))
 }

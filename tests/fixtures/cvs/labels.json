@@ -1,0 +1,122 @@
+[
+  {
+    "file": "cv-01.pdf",
+    "name": "Synthetic Candidate 1",
+    "rawSkill": "excel",
+    "expectedSkillSlug": "ms-excel"
+  },
+  {
+    "file": "cv-02.pdf",
+    "name": "Synthetic Candidate 2",
+    "rawSkill": "ms word",
+    "expectedSkillSlug": "ms-word"
+  },
+  {
+    "file": "cv-03.pdf",
+    "name": "Synthetic Candidate 3",
+    "rawSkill": "teamwork",
+    "expectedSkillSlug": "kerja-tim"
+  },
+  {
+    "file": "cv-04.pdf",
+    "name": "Synthetic Candidate 4",
+    "rawSkill": "communication skills",
+    "expectedSkillSlug": "komunikasi"
+  },
+  {
+    "file": "cv-05.pdf",
+    "name": "Synthetic Candidate 5",
+    "rawSkill": "js",
+    "expectedSkillSlug": "javascript"
+  },
+  {
+    "file": "cv-06.pdf",
+    "name": "Synthetic Candidate 6",
+    "rawSkill": "python3",
+    "expectedSkillSlug": "python"
+  },
+  {
+    "file": "cv-07.pdf",
+    "name": "Synthetic Candidate 7",
+    "rawSkill": "mysql",
+    "expectedSkillSlug": "sql"
+  },
+  {
+    "file": "cv-08.pdf",
+    "name": "Synthetic Candidate 8",
+    "rawSkill": "html5",
+    "expectedSkillSlug": "html"
+  },
+  {
+    "file": "cv-09.pdf",
+    "name": "Synthetic Candidate 9",
+    "rawSkill": "css3",
+    "expectedSkillSlug": "css"
+  },
+  {
+    "file": "cv-10.pdf",
+    "name": "Synthetic Candidate 10",
+    "rawSkill": "reactjs",
+    "expectedSkillSlug": "react"
+  },
+  {
+    "file": "cv-11.pdf",
+    "name": "Synthetic Candidate 11",
+    "rawSkill": "mengolah tabel dan rumus spreadsheet",
+    "expectedSkillSlug": "ms-excel"
+  },
+  {
+    "file": "cv-12.pdf",
+    "name": "Synthetic Candidate 12",
+    "rawSkill": "menulis dokumen menggunakan pengolah kata",
+    "expectedSkillSlug": "ms-word"
+  },
+  {
+    "file": "cv-13.pdf",
+    "name": "Synthetic Candidate 13",
+    "rawSkill": "bekerja bersama anggota kelompok",
+    "expectedSkillSlug": "kerja-tim"
+  },
+  {
+    "file": "cv-14.pdf",
+    "name": "Synthetic Candidate 14",
+    "rawSkill": "menyampaikan informasi secara efektif",
+    "expectedSkillSlug": "komunikasi"
+  },
+  {
+    "file": "cv-15.pdf",
+    "name": "Synthetic Candidate 15",
+    "rawSkill": "membangun interaksi web dengan JavaScript",
+    "expectedSkillSlug": "javascript"
+  },
+  {
+    "file": "cv-16.pdf",
+    "name": "Synthetic Candidate 16",
+    "rawSkill": "analisis data dengan bahasa Python",
+    "expectedSkillSlug": "python"
+  },
+  {
+    "file": "cv-17.pdf",
+    "name": "Synthetic Candidate 17",
+    "rawSkill": "menulis kueri basis data relasional",
+    "expectedSkillSlug": "sql"
+  },
+  {
+    "file": "cv-18.pdf",
+    "name": "Synthetic Candidate 18",
+    "rawSkill": "membuat struktur halaman HTML",
+    "expectedSkillSlug": "html"
+  },
+  {
+    "file": "cv-19.pdf",
+    "name": "Synthetic Candidate 19",
+    "rawSkill": "menata tampilan halaman dengan CSS",
+    "expectedSkillSlug": "css"
+  },
+  {
+    "file": "cv-20.pdf",
+    "name": "Synthetic Candidate 20",
+    "rawSkill": "membangun antarmuka dengan komponen React",
+    "expectedSkillSlug": "react"
+  }
+]

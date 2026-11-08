@@ -198,7 +198,7 @@ pub fn rank_trainings(trainings: &[Training], m: &JobMatch) -> Vec<RankedTrainin
     });
     result
 }
-/// LLM prose never supplies arbitrary skill names: it chooses catalog IDs only.
+/// LLM picks priority skills by catalog index only; its prose is checked by `validate_prose`.
 #[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplanationPlan {
@@ -216,23 +216,151 @@ pub fn validate_explanation(plan: &ExplanationPlan, m: &JobMatch) -> bool {
         && plan.priority_skill_ids.iter().collect::<HashSet<_>>().len()
             == plan.priority_skill_ids.len()
 }
-pub fn explanation(m: &JobMatch, skills: &[Skill], priority: &[Uuid]) -> String {
-    let names: Vec<_> = priority
-        .iter()
-        .filter_map(|id| skills.iter().find(|s| s.id == *id).map(|s| s.nama.as_str()))
-        .collect();
-    let lead = format!(
-        "Skormu untuk {} {}% ({} dari {} poin).",
-        m.job.nama, m.score, m.earned, m.total
-    );
-    if names.is_empty() {
-        format!("{lead} Semua skill wajib sudah lengkap; tinjau skill tambahan jika masih ada.")
-    } else {
-        format!(
-            "{lead} Prioritaskan mempelajari {}. Pilih pelatihan yang mengajarkan skill yang kurang.",
-            names.join(", ")
-        )
+/// Score after every missing required skill is learned.
+pub fn projected_score(m: &JobMatch) -> i64 {
+    if m.total == 0 {
+        return 0;
     }
+    let gain = m.missing_wajib.len() as i64 * 2;
+    (100.0 * (m.earned + gain) as f64 / m.total as f64).round() as i64
+}
+/// Every figure the LLM may quote. Anything else in its prose is treated as invented.
+pub fn explanation_numbers(m: &JobMatch, trainings: usize) -> HashSet<i64> {
+    let count =
+        |list: &[JobSkill], tipe: &str| list.iter().filter(|s| s.tipe == tipe).count() as i64;
+    let w = count(&m.job.skills, "wajib");
+    let o = count(&m.job.skills, "opsional");
+    let ow = count(&m.owned, "wajib");
+    let oo = count(&m.owned, "opsional");
+    let (mw, mo) = (
+        m.missing_wajib.len() as i64,
+        m.missing_opsional.len() as i64,
+    );
+    HashSet::from([
+        0,
+        1,
+        2,
+        100,
+        m.score,
+        m.earned,
+        m.total,
+        w,
+        o,
+        w + o,
+        ow,
+        oo,
+        ow + oo,
+        mw,
+        mo,
+        mw + mo,
+        mw * 2,
+        mw * 2 + mo,
+        100 - m.score,
+        m.total - m.earned,
+        projected_score(m),
+        trainings as i64,
+    ])
+}
+/// LLM prose is accepted only if it is a sane length, plain text, and quotes no number outside
+/// `numbers`. Digits inside known names (e.g. "HTML5") are removed before the check.
+pub fn validate_prose(text: &str, names: &[&str], numbers: &HashSet<i64>) -> bool {
+    let len = text.chars().count();
+    if !(150..=2500).contains(&len) || text.contains(['#', '*', '`', '<', '>']) {
+        return false;
+    }
+    let mut scrubbed = text.to_string();
+    let mut sorted = names.to_vec();
+    sorted.sort_by_key(|n| std::cmp::Reverse(n.len()));
+    for n in sorted.into_iter().filter(|n| !n.is_empty()) {
+        scrubbed = scrubbed.replace(n, " ");
+    }
+    scrubbed
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|t| !t.is_empty())
+        .all(|t| t.parse::<i64>().is_ok_and(|n| numbers.contains(&n)))
+}
+/// "a", "a dan b", "a, b dan c".
+fn join_id(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => (*one).to_string(),
+        [rest @ .., last] => format!("{} dan {last}", rest.join(", ")),
+    }
+}
+/// Paragraphs separated by a blank line. Every name and number comes from the match, the catalog,
+/// or the ranked trainings, so the text cannot mention a skill or figure the data does not hold.
+pub fn explanation(
+    m: &JobMatch,
+    skills: &[Skill],
+    priority: &[Uuid],
+    trainings: &[RankedTraining],
+) -> String {
+    let name = |id: &Uuid| {
+        skills
+            .iter()
+            .find(|s| s.id == *id)
+            .map_or("skill tanpa nama", |s| s.nama.as_str())
+    };
+    let names = |list: &[JobSkill]| list.iter().map(|s| name(&s.skill_id)).collect::<Vec<_>>();
+    let owned_wajib = m.owned.iter().filter(|s| s.tipe == "wajib").count();
+    let verdict = match m.score {
+        80.. => "Profilmu sudah sangat dekat dengan kebutuhan pekerjaan ini.",
+        50..=79 => "Fondasimu sudah cukup kuat, tinggal melengkapi beberapa skill.",
+        _ => "Jaraknya masih cukup lebar, jadi fokuskan tenaga ke skill wajib lebih dulu.",
+    };
+    let mut out = vec![format!(
+        "Skormu untuk {} {}% ({} dari {} poin). Kamu sudah punya {} dari {} skill yang dibutuhkan: {} wajib dan {} tambahan. {verdict}",
+        m.job.nama,
+        m.score,
+        m.earned,
+        m.total,
+        m.owned.len(),
+        m.job.skills.len(),
+        owned_wajib,
+        m.owned.len() - owned_wajib,
+    )];
+
+    let wajib = names(&m.missing_wajib);
+    let opsional = names(&m.missing_opsional);
+    let priority: Vec<_> = priority.iter().map(name).collect();
+    if wajib.is_empty() && opsional.is_empty() {
+        out.push("Semua skill wajib dan tambahan sudah kamu punya. Kamu siap melamar.".into());
+    } else if wajib.is_empty() {
+        out.push(format!(
+            "Semua skill wajib sudah lengkap. Sisa poin ada di skill tambahan: {}. Masing-masing bernilai 1 poin dan membawa skormu ke 100% bila semuanya dikuasai.",
+            join_id(&opsional)
+        ));
+    } else {
+        let projected = projected_score(m);
+        let mut p = format!(
+            "Masih ada {} skill wajib yang belum kamu punya: {}. Skill wajib bernilai 2 poin, dua kali skill tambahan, jadi melengkapinya menaikkan skor paling cepat. Kalau semuanya terpenuhi, skormu naik menjadi {projected}%.",
+            wajib.len(),
+            join_id(&wajib)
+        );
+        if !opsional.is_empty() {
+            p += &format!(" Setelah itu, {} bisa menambah poin.", join_id(&opsional));
+        }
+        out.push(p);
+    }
+
+    if !priority.is_empty() {
+        let mut p = format!("Urutan belajar yang disarankan: {}.", join_id(&priority));
+        if let Some(t) = trainings.first() {
+            let covered: Vec<_> = t
+                .covers_wajib
+                .iter()
+                .chain(&t.covers_opsional)
+                .map(name)
+                .collect();
+            p += &format!(
+                " Pelatihan {} mengajarkan {}, jadi bisa jadi langkah pertama.",
+                t.training.nama,
+                join_id(&covered)
+            );
+        }
+        out.push(p);
+    }
+    out.join("\n\n")
 }
 
 #[cfg(test)]
@@ -273,6 +401,72 @@ mod tests {
                 priority_skill_ids: vec![b]
             },
             &m
+        ));
+    }
+    #[test]
+    fn explanation_names_only_catalog_skills_and_real_numbers() {
+        let skill = |nama: &str| Skill {
+            id: Uuid::new_v4(),
+            nama: nama.into(),
+            kategori: "X".into(),
+            alias: vec![],
+        };
+        let (git, sql, py) = (skill("Git"), skill("SQL"), skill("Python"));
+        let req = |s: &Skill, tipe: &str| JobSkill {
+            skill_id: s.id,
+            tipe: tipe.into(),
+        };
+        let job = Occupation {
+            id: Uuid::new_v4(),
+            nama: "Software Engineer".into(),
+            kode_kbji: "2512".into(),
+            bidang: "TI".into(),
+            deskripsi: "".into(),
+            skills: vec![req(&git, "wajib"), req(&sql, "wajib"), req(&py, "opsional")],
+        };
+        let m = match_job(&job, &HashSet::from([sql.id]));
+        let ranked = rank_trainings(
+            &[Training {
+                id: Uuid::new_v4(),
+                institution_id: Uuid::new_v4(),
+                nama: "Kelas Git".into(),
+                biaya: Some(0),
+                moda: None,
+                durasi: "1 hari".into(),
+                url_daftar: "https://example.test".into(),
+                skill_ids: vec![git.id],
+                sample: true,
+            }],
+            &m,
+        );
+        let text = explanation(&m, &[git.clone(), sql, py], &[git.id], &ranked);
+        assert!(text.starts_with("Skormu untuk Software Engineer 40% (2 dari 5 poin)."));
+        assert!(text.contains("1 skill wajib yang belum kamu punya: Git."));
+        assert!(text.contains("skormu naik menjadi 80%."));
+        assert!(text.contains("Pelatihan Kelas Git mengajarkan Git"));
+        assert_eq!(text.split("\n\n").count(), 3);
+        assert_eq!(join_id(&["a", "b", "c"]), "a, b dan c");
+
+        let numbers = explanation_numbers(&m, ranked.len());
+        let names = ["Software Engineer", "Git", "SQL", "Python", "Kelas Git"];
+        let ok = "Skormu 40% karena kamu baru mengumpulkan 2 dari 5 poin. SQL sudah jadi modal yang bagus.\n\nGit adalah skill wajib senilai 2 poin. Kalau Git dikuasai, skormu naik ke 80%.\n\nMulai dari Kelas Git yang memang mengajarkan Git.";
+        assert!(validate_prose(ok, &names, &numbers));
+        assert!(
+            !validate_prose(&ok.replace("80%", "95%"), &names, &numbers),
+            "invented number"
+        );
+        assert!(
+            !validate_prose(&ok.replace("Skormu", "**Skormu**"), &names, &numbers),
+            "markdown"
+        );
+        assert!(
+            !validate_prose("Skormu 40%.", &names, &numbers),
+            "too short"
+        );
+        assert!(validate_prose(
+            &ok.replace("Kelas Git", "Kelas Git 2"),
+            &["Kelas Git 2", "Git"],
+            &numbers
         ));
     }
     #[test]

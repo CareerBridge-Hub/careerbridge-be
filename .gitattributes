@@ -1,0 +1,2 @@
+# sqlx checksums raw bytes: migrations must stay LF on every OS.
+migrations/*.sql text eol=lf

@@ -144,7 +144,7 @@ async fn admin_crud_rls_atomic_import_and_cron_visibility() {
         q: title,
         city: String::new(),
         source: String::new(),
-        category: String::new(),
+        occupation: String::new(),
     };
     assert_eq!(jobs::page(&pool, &query).await.unwrap()["total"], 1);
     assert!(matches!(

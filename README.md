@@ -6,6 +6,8 @@ Start with [Supabase and local setup](docs/SETUP.md), the [API contract](docs/op
 
 Docker targets are available for the API (`runtime`, default), migrations (`migrate`), and credential-free tests (`test`). See [container setup](docs/SETUP.md#docker) for build/run commands and the persistent model cache.
 
+Daily Google Jobs vacancy queue (all job categories, OpenWeb Ninja): see [docs/JOB_SEARCH_QUEUE.md](docs/JOB_SEARCH_QUEUE.md).
+
 ```sh
 cp .env.example .env
 # Configure credentials, then run migrations with the schema-owner connection.

@@ -34,18 +34,22 @@ pub struct State {
     pub llm: Arc<dyn LlmProvider>,
 }
 pub fn configure(c: &mut web::ServiceConfig) {
-    c.app_data(
-        web::PathConfig::default()
-            .error_handler(|_, _| AppError::Invalid("ID tidak valid.").into()),
-    )
-    .app_data(
-        web::QueryConfig::default()
-            .error_handler(|_, _| AppError::Invalid("Parameter tidak valid.").into()),
-    )
+    // Clients get a generic message; the real serde reason (e.g. `unknown field`) goes to the log.
+    c.app_data(web::PathConfig::default().error_handler(|err, req| {
+        tracing::debug!(path = %req.path(), error = %err, "path rejected");
+        AppError::Invalid("ID tidak valid.").into()
+    }))
+    .app_data(web::QueryConfig::default().error_handler(|err, req| {
+        tracing::debug!(path = %req.path(), error = %err, "query rejected");
+        AppError::Invalid("Parameter tidak valid.").into()
+    }))
     .app_data(
         web::JsonConfig::default()
             .limit(64 * 1024)
-            .error_handler(|_, _| AppError::Invalid("JSON tidak valid.").into()),
+            .error_handler(|err, req| {
+                tracing::debug!(path = %req.path(), error = %err, "json rejected");
+                AppError::Invalid("JSON tidak valid.").into()
+            }),
     );
     c.route("/swagger-ui", web::get().to(swagger_redirect))
         .route("/swagger-ui/", web::get().to(swagger_ui))
@@ -686,11 +690,18 @@ async fn analysis(
 }
 pub(crate) fn analysis_key(s: &State, revision: i64, catalog_revision: i64) -> String {
     format!(
-        "{revision}:{catalog_revision}:{}:{}:analysis-v4-real-training-rag",
+        "{revision}:{catalog_revision}:{}:{}:analysis-v6-llm-explanation",
         s.embedding.version(),
         s.llm.model()
     )
 }
+const EXPLANATION_PROMPT: &str = "You are a career coach for Indonesian job seekers. Return JSON {\"priorityIndices\":[0,1],\"explanation\":\"...\"}.\n\
+priorityIndices: at most 5 indices from missingSkills, required skills first, favouring skills the supplied trainings confirm they cover. Use only supplied indices; [] when missingSkills is empty.\n\
+explanation: Bahasa Indonesia, friendly and direct, address the reader as \"kamu\". Exactly 3 paragraphs separated by a blank line (\\n\\n), 110 to 200 words in total. \
+Paragraph 1: what the score means for this occupation and which owned skills are real strengths; quote score, points.earned and points.total. \
+Paragraph 2: the gap that matters most and why; required skills are worth 2 points and optional skills 1 point; quote points.scoreIfAllRequiredLearned if any required skill is missing. \
+Paragraph 3: one concrete next step. Only say a training teaches a skill if that skill is in its confirmedMissingSkillsCovered; relatedTopics are a hint, not a promise.\n\
+Rules: use only skill names, training names and numbers that appear in the data. Never invent skills, trainings, companies, salaries, durations or percentages. Plain text only: no markdown, lists, headings or emoji.";
 pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<Value, AppError> {
     let mut tx = db::active_tx(&s.pool, a.sub).await?;
     let revision: i64 = sqlx::query_scalar("SELECT revision FROM users WHERE id=$1")
@@ -784,11 +795,55 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
       "missingSkills":missing.iter().enumerate().map(|(index,s)|json!({"index":index,"name":s.nama,"required":m.missing_wajib.iter().any(|j|j.skill_id==s.id)})).collect::<Vec<_>>(),
       "trainings":ranked.iter().take(10).map(|r|json!({"name":r.training.nama,"retrievalMethod":page["evidence"][r.training.id.to_string()]["method"],"relatedTopics":page["evidence"][r.training.id.to_string()]["relatedSkillIds"].as_array().into_iter().flatten().filter_map(|id|skills.iter().find(|s|Some(s.id.to_string().as_str())==id.as_str()).map(|s|s.nama.as_str())).collect::<Vec<_>>(),"confirmedMissingSkillsCovered":r.covers_wajib.iter().chain(&r.covers_opsional).filter_map(|id|skills.iter().find(|s|s.id==*id).map(|s|s.nama.as_str())).collect::<Vec<_>>()})).collect::<Vec<_>>()
     });
-    if !missing.is_empty() {
-        for _ in 0..2 {
-            if let Ok(v)=s.llm.json("Choose at most 5 priority missing skills, prioritizing required skills and the supplied training context. Related topics are inferred relevance, never confirmed coverage. Return JSON {\"priorityIndices\":[0,1]}; use only supplied indices, no prose.",context.clone()).await && let Some(indices)=v["priorityIndices"].as_array(){let selected:Option<Vec<Uuid>>=indices.iter().map(|v|v.as_u64().and_then(|i|missing.get(i as usize).map(|s|s.id))).collect();if let Some(selected)=selected{let candidate=ExplanationPlan{priority_skill_ids:selected};if !candidate.priority_skill_ids.is_empty()&&validate_explanation(&candidate,&m){plan=candidate;fallback=false;break}}}
+    let mut context = context;
+    let owned_wajib = m.owned.iter().filter(|j| j.tipe == "wajib").count();
+    context["points"] = json!({"perRequiredSkill":2,"perOptionalSkill":1,"earned":m.earned,"total":m.total,
+      "ownedRequired":owned_wajib,"ownedOptional":m.owned.len()-owned_wajib,
+      "missingRequired":m.missing_wajib.len(),"missingOptional":m.missing_opsional.len(),
+      "scoreIfAllRequiredLearned":projected_score(&m)});
+    // Prose may only quote these names and numbers; anything else falls back to the template.
+    let names: Vec<&str> = std::iter::once(m.job.nama.as_str())
+        .chain(skills.iter().map(|s| s.nama.as_str()))
+        .chain(ranked.iter().map(|r| r.training.nama.as_str()))
+        .collect();
+    let numbers = explanation_numbers(&m, ranked.len());
+    let mut prose = None;
+    let mut llm_priority = false;
+    for _ in 0..2 {
+        let Ok(v) = s.llm.json(EXPLANATION_PROMPT, context.clone()).await else {
+            continue;
+        };
+        if !llm_priority
+            && let Some(selected) = v["priorityIndices"].as_array().and_then(|indices| {
+                indices
+                    .iter()
+                    .map(|v| {
+                        v.as_u64()
+                            .and_then(|i| missing.get(i as usize).map(|s| s.id))
+                    })
+                    .collect::<Option<Vec<Uuid>>>()
+            })
+        {
+            let candidate = ExplanationPlan {
+                priority_skill_ids: selected,
+            };
+            if (missing.is_empty() || !candidate.priority_skill_ids.is_empty())
+                && validate_explanation(&candidate, &m)
+            {
+                plan = candidate;
+                llm_priority = true;
+            }
+        }
+        if let Some(text) = v["explanation"].as_str().map(str::trim)
+            && validate_prose(text, &names, &numbers)
+        {
+            prose = Some(text.to_string());
+            fallback = false;
+            break;
         }
     }
+    let explanation_text =
+        prose.unwrap_or_else(|| explanation(&m, &skills, &plan.priority_skill_ids, &ranked));
     let profile_text = skills
         .iter()
         .filter(|s| profile_skill_ids.contains(&s.id))
@@ -830,7 +885,7 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
         .into_iter()
         .collect();
     let card_skills = browsing::by_ids(&s.pool, "skills", &extra_ids).await?;
-    let result = json!({"match":m,"skills":card_skills,"institutions":institutions,"relatedOccupations":related_occupations,"relatedTrainings":related_training_items,"trainings":ranked,"trainingEvidence":page["evidence"],"trainingRetrieval":page["retrieval"],"relatedOccupationIds":related_jobs,"relatedTrainingIds":related_trainings,"explanation":explanation(&m,&skills,&plan.priority_skill_ids),"prioritySkillIds":plan.priority_skill_ids,"fallback":fallback,"model":s.llm.model(),"revision":key});
+    let result = json!({"match":m,"skills":card_skills,"institutions":institutions,"relatedOccupations":related_occupations,"relatedTrainings":related_training_items,"trainings":ranked,"trainingEvidence":page["evidence"],"trainingRetrieval":page["retrieval"],"relatedOccupationIds":related_jobs,"relatedTrainingIds":related_trainings,"explanation":explanation_text,"prioritySkillIds":plan.priority_skill_ids,"fallback":fallback,"model":s.llm.model(),"revision":key});
     let mut tx = db::active_tx(&s.pool, a.sub).await?;
     sqlx::query("INSERT INTO analyses(user_id,occupation_id,revision_key,result) SELECT $1,$2,$3,$4 WHERE EXISTS(SELECT 1 FROM users WHERE id=$1 AND revision=$5) AND EXISTS(SELECT 1 FROM catalog_revision WHERE revision=$6) ON CONFLICT(user_id,occupation_id) DO UPDATE SET revision_key=excluded.revision_key,result=excluded.result,created_at=now()").bind(a.sub).bind(id).bind(key).bind(&result).bind(revision).bind(catalog_revision).execute(&mut *tx).await?;
     tx.commit().await?;

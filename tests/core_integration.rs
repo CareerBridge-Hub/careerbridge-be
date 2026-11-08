@@ -1652,3 +1652,185 @@ async fn cv_normalization_batches_semantic_work_and_deduplicates_unknowns() {
         .unwrap();
     server.stop(true).await;
 }
+
+#[actix_web::test]
+#[ignore = "requires disposable TEST_DATABASE_URL"]
+async fn admin_http_routes_require_database_role() {
+    let (state, owner, _objects, _llm, issuer, provider) = setup().await;
+    let app = test::init_service(App::new().app_data(state).configure(http::configure)).await;
+    let admin = Uuid::new_v4();
+    let user = Uuid::new_v4();
+    for (id, role) in [(admin, 2_i16), (user, 1_i16)] {
+        sqlx::query("INSERT INTO auth.users(id) VALUES($1)")
+            .bind(id)
+            .execute(&owner)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO users(id,role_id,nama,pendidikan,jurusan,province_id,kota,persetujuan_cv_at) VALUES($1,$2,'HTTP admin fixture','S1','TI',1,'Test',now())")
+            .bind(id).bind(role).execute(&owner).await.unwrap();
+    }
+    let admin_token = token(admin, &issuer);
+    let user_token = token(user, &issuer);
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/v1/admin/catalog")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), 401);
+    for (method, path, body) in [
+        (
+            actix_web::http::Method::GET,
+            "/api/v1/admin/catalog",
+            json!(null),
+        ),
+        (
+            actix_web::http::Method::POST,
+            "/api/v1/admin/skills",
+            json!({"nama":"Forbidden","kategori":"Test"}),
+        ),
+        (
+            actix_web::http::Method::POST,
+            "/api/v1/admin/skills/import",
+            json!({"rows":[{"nama":"Forbidden","kategori":"Test"}]}),
+        ),
+        (
+            actix_web::http::Method::DELETE,
+            "/api/v1/admin/skills/00000000-0000-0000-0000-000000000000",
+            json!(null),
+        ),
+        (
+            actix_web::http::Method::PATCH,
+            "/api/v1/admin/vacancies/00000000-0000-0000-0000-000000000000/visibility",
+            json!({"hidden":true}),
+        ),
+    ] {
+        let response = test::call_service(
+            &app,
+            test::TestRequest::default()
+                .method(method)
+                .uri(path)
+                .insert_header(("Authorization", format!("Bearer {user_token}")))
+                .set_json(body)
+                .to_request(),
+        )
+        .await;
+        assert_eq!(
+            response.status(),
+            403,
+            "ordinary user must be denied on {path}"
+        );
+    }
+    let id = Uuid::new_v4();
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/v1/admin/skills")
+            .insert_header(("Authorization", format!("Bearer {admin_token}")))
+            .set_json(
+                json!({"id":id,"nama":format!("HTTP admin {id}"),"kategori":"Fixture","alias":[]}),
+            )
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/v1/admin/catalog")
+            .insert_header(("Authorization", format!("Bearer {admin_token}")))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    let body: Value = test::read_body_json(response).await;
+    assert!(
+        body["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == id.to_string())
+    );
+    assert!(body.get("users").is_none());
+    let job_id = Uuid::new_v4();
+    let response=test::call_service(&app,test::TestRequest::post().uri("/api/v1/admin/jobs")
+        .insert_header(("Authorization",format!("Bearer {admin_token}")))
+        .set_json(json!({"id":job_id,"nama":format!("Mutable occupation {job_id}"),"kodeKbji":"2512","bidang":"Fixture","deskripsi":"Fixture","skills":[{"skillId":id,"tipe":"wajib"}]})).to_request()).await;
+    assert_eq!(response.status(), 200);
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/v1/me/trainings?limit=1")
+            .insert_header(("Authorization", format!("Bearer {user_token}")))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    let options: Value = test::read_body_json(response).await;
+    assert!(
+        options["occupationOptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["id"] == job_id.to_string())
+    );
+    let response = test::call_service(
+        &app,
+        test::TestRequest::delete()
+            .uri(&format!("/api/v1/admin/jobs/{job_id}"))
+            .insert_header(("Authorization", format!("Bearer {admin_token}")))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/v1/me/trainings?limit=1")
+            .insert_header(("Authorization", format!("Bearer {user_token}")))
+            .to_request(),
+    )
+    .await;
+    let options: Value = test::read_body_json(response).await;
+    assert!(
+        !options["occupationOptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["id"] == job_id.to_string())
+    );
+    let response = test::call_service(
+        &app,
+        test::TestRequest::delete()
+            .uri(&format!("/api/v1/admin/skills/{id}"))
+            .insert_header(("Authorization", format!("Bearer {admin_token}")))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    sqlx::query("UPDATE users SET role_id=1 WHERE id=$1")
+        .bind(admin)
+        .execute(&owner)
+        .await
+        .unwrap();
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/v1/admin/catalog")
+            .insert_header(("Authorization", format!("Bearer {admin_token}")))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        403,
+        "an existing JWT must not preserve a revoked admin role"
+    );
+    sqlx::query("DELETE FROM auth.users WHERE id=ANY($1)")
+        .bind(vec![admin, user])
+        .execute(&owner)
+        .await
+        .unwrap();
+    provider.stop(true).await;
+}

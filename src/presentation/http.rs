@@ -54,6 +54,7 @@ pub fn configure(c: &mut web::ServiceConfig) {
         .route("/ready", web::get().to(ready))
         .service(
             web::scope("/api/v1")
+                .configure(super::admin::configure)
                 .configure(super::session::configure)
                 .route("/openapi.json", web::get().to(openapi))
                 .route("/me", web::get().to(me))
@@ -234,6 +235,11 @@ async fn me(s: web::Data<State>, a: Claims) -> Result<web::Json<Value>, AppError
     .into_iter()
     .map(|r| json!({"skillId":r.get::<Uuid,_>("skill_id"),"sumber":r.get::<String,_>("sumber")}))
     .collect();
+    let custom_skills: Vec<String> =
+        sqlx::query_scalar("SELECT nama FROM user_custom_skills WHERE user_id=$1 ORDER BY nama")
+            .bind(a.sub)
+            .fetch_all(&mut *tx)
+            .await?;
     let cv=sqlx::query("SELECT * FROM cv_uploads WHERE user_id=$1 AND id=(SELECT current_cv_id FROM users WHERE id=$1) AND status='selesai' AND deleted_at IS NULL").bind(a.sub).fetch_optional(&mut *tx).await?;
     let cv = if let Some(cv) = cv {
         let parsed: ParsedCv =
@@ -245,7 +251,7 @@ async fn me(s: web::Data<State>, a: Claims) -> Result<web::Json<Value>, AppError
     };
     tx.commit().await?;
     Ok(web::Json(
-        json!({"id":a.sub,"email":a.email,"nama":row.get::<String,_>("nama"),"pendidikan":row.get::<String,_>("pendidikan"),"jurusan":row.get::<String,_>("jurusan"),"provinsi":row.get::<String,_>("province"),"kota":row.get::<String,_>("kota"),"role":row.get::<String,_>("role"),"createdAt":row.get::<chrono::DateTime<chrono::Utc>,_>("created_at"),"skills":skills,"targetJobId":row.get::<Option<Uuid>,_>("target_occupation_id"),"cv":cv}),
+        json!({"id":a.sub,"email":a.email,"nama":row.get::<String,_>("nama"),"pendidikan":row.get::<String,_>("pendidikan"),"jurusan":row.get::<String,_>("jurusan"),"provinsi":row.get::<String,_>("province"),"kota":row.get::<String,_>("kota"),"role":row.get::<String,_>("role"),"createdAt":row.get::<chrono::DateTime<chrono::Utc>,_>("created_at"),"skills":skills,"customSkills":custom_skills,"targetJobId":row.get::<Option<Uuid>,_>("target_occupation_id"),"cv":cv}),
     ))
 }
 #[utoipa::path(get, summary = "Paginated catalog; occupations are not vacancy postings", path = "/api/v1/catalog/{kind}", responses((status = 200, description = "Success", body = CatalogPage), (status = 400, description = "Invalid input", body = ErrorResponse),
@@ -271,6 +277,8 @@ async fn catalog(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SkillsInput {
     skills: Vec<UserSkill>,
+    #[serde(default)]
+    custom_skills: Vec<String>,
     cv_id: Option<Uuid>,
 }
 #[utoipa::path(put, summary = "Replace confirmed skills; server validates CV provenance", path = "/api/v1/me/skills", responses((status = 200, description = "Success", body = OkResponse), (status = 400, description = "Invalid input", body = ErrorResponse),
@@ -284,8 +292,23 @@ async fn save_skills(
     a: Claims,
     input: web::Json<SkillsInput>,
 ) -> Result<web::Json<Value>, AppError> {
-    if input.skills.len() > 100 {
+    if input.skills.len() + input.custom_skills.len() > 100 {
         return Err(AppError::Invalid("Maksimal 100 skill."));
+    }
+    let mut custom_seen = HashSet::new();
+    for name in &input.custom_skills {
+        let trimmed = name.trim();
+        let key = crate::domain::normalize(trimmed);
+        if trimmed.is_empty()
+            || trimmed.chars().count() > 80
+            || trimmed.chars().any(char::is_control)
+            || key.is_empty()
+            || !custom_seen.insert(key)
+        {
+            return Err(AppError::Invalid(
+                "Skill tambahan tidak valid (maksimal 80 karakter).",
+            ));
+        }
     }
     let mut tx = db::active_tx(&s.pool, a.sub).await?;
     // Serialize mutations for this user; provenance can only come from server-held CV results.
@@ -320,6 +343,17 @@ async fn save_skills(
         {
             return Err(AppError::Invalid("Daftar skill tidak valid."));
         }
+    }
+    sqlx::query("DELETE FROM user_custom_skills WHERE user_id=$1")
+        .bind(a.sub)
+        .execute(&mut *tx)
+        .await?;
+    for name in &input.custom_skills {
+        sqlx::query("INSERT INTO user_custom_skills(user_id,nama) VALUES($1,$2)")
+            .bind(a.sub)
+            .bind(name.trim())
+            .execute(&mut *tx)
+            .await?;
     }
     sqlx::query("DELETE FROM user_skills WHERE user_id=$1")
         .bind(a.sub)
@@ -553,9 +587,19 @@ async fn training_page(
     if page.recommended && m.is_none() {
         return Err(AppError::Invalid("Pilih pekerjaan untuk rekomendasi."));
     }
-    Ok(web::Json(
-        browsing::catalog(&s.pool, "trainings", &page, m.as_ref()).await?,
-    ))
+    let mut result = crate::infrastructure::training_search::page(
+        &s.pool,
+        s.embedding.as_ref(),
+        &page,
+        m.as_ref(),
+    )
+    .await?;
+    // Carry lightweight mutable choices with the existing training request;
+    // opening the frontend selector does not require a separate request.
+    let options: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'nama',nama) ORDER BY nama,id),'[]'::jsonb) FROM occupations")
+        .fetch_one(&s.pool).await?;
+    result["occupationOptions"] = options;
+    Ok(web::Json(result))
 }
 #[utoipa::path(get,path="/api/v1/me/summary",summary="Bounded dashboard summary, target, skill labels and training count",responses((status=200,description="At most six top matches plus selected target",body=DashboardSummary)),security(("cookieAuth"=[])))]
 async fn summary(s: web::Data<State>, a: Claims) -> Result<web::Json<Value>, AppError> {
@@ -599,7 +643,7 @@ async fn summary(s: web::Data<State>, a: Claims) -> Result<web::Json<Value>, App
                 .map(|j| j.skill_id)
         })
         .collect();
-    let free:i64=sqlx::query_scalar("SELECT count(*) FROM trainings t WHERE t.aktif AND t.biaya=0 AND EXISTS(SELECT 1 FROM training_skills ts WHERE ts.training_id=t.id AND ts.skill_id=ANY($1))").bind(missing).fetch_one(&s.pool).await?;
+    let free:i64=sqlx::query_scalar("SELECT count(*) FROM trainings t WHERE t.aktif AND NOT t.sample AND t.biaya=0 AND EXISTS(SELECT 1 FROM training_skills ts WHERE ts.training_id=t.id AND ts.skill_id=ANY($1))").bind(missing).fetch_one(&s.pool).await?;
     let ids: Vec<Uuid> = items
         .iter()
         .flat_map(|m| m.job.skills.iter().map(|j| j.skill_id))
@@ -642,7 +686,7 @@ async fn analysis(
 }
 pub(crate) fn analysis_key(s: &State, revision: i64, catalog_revision: i64) -> String {
     format!(
-        "{revision}:{catalog_revision}:{}:{}:analysis-v3-paged",
+        "{revision}:{catalog_revision}:{}:{}:analysis-v4-real-training-rag",
         s.embedding.version(),
         s.llm.model()
     )
@@ -691,11 +735,11 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
         .into_iter()
         .map(|v| serde_json::from_value(v).map_err(|_| AppError::Internal))
         .collect::<Result<_, _>>()?;
-    let page = browsing::catalog(
+    let page = crate::infrastructure::training_search::page(
         &s.pool,
-        "trainings",
+        s.embedding.as_ref(),
         &Browse {
-            limit: 3,
+            limit: 8,
             recommended: true,
             ..Default::default()
         },
@@ -704,7 +748,25 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
     .await?;
     let trainings: Vec<Training> =
         serde_json::from_value(page["items"].clone()).map_err(|_| AppError::Internal)?;
-    let ranked = rank_trainings(&trainings, &m);
+    let ranked: Vec<RankedTraining> = trainings
+        .iter()
+        .take(3)
+        .map(|t| RankedTraining {
+            training: t.clone(),
+            covers_wajib: t
+                .skill_ids
+                .iter()
+                .filter(|id| m.missing_wajib.iter().any(|s| s.skill_id == **id))
+                .copied()
+                .collect(),
+            covers_opsional: t
+                .skill_ids
+                .iter()
+                .filter(|id| m.missing_opsional.iter().any(|s| s.skill_id == **id))
+                .copied()
+                .collect(),
+        })
+        .collect();
     let missing: Vec<_> = m
         .missing_wajib
         .iter()
@@ -720,11 +782,11 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
       "occupation":m.job.nama,"score":m.score,
       "ownedSkills":skills.iter().filter(|s|profile_skill_ids.contains(&s.id)).map(|s|s.nama.as_str()).collect::<Vec<_>>(),
       "missingSkills":missing.iter().enumerate().map(|(index,s)|json!({"index":index,"name":s.nama,"required":m.missing_wajib.iter().any(|j|j.skill_id==s.id)})).collect::<Vec<_>>(),
-      "trainings":ranked.iter().take(10).map(|r|json!({"name":r.training.nama,"missingSkillsCovered":r.covers_wajib.iter().chain(&r.covers_opsional).filter_map(|id|skills.iter().find(|s|s.id==*id).map(|s|s.nama.as_str())).collect::<Vec<_>>()})).collect::<Vec<_>>()
+      "trainings":ranked.iter().take(10).map(|r|json!({"name":r.training.nama,"retrievalMethod":page["evidence"][r.training.id.to_string()]["method"],"relatedTopics":page["evidence"][r.training.id.to_string()]["relatedSkillIds"].as_array().into_iter().flatten().filter_map(|id|skills.iter().find(|s|Some(s.id.to_string().as_str())==id.as_str()).map(|s|s.nama.as_str())).collect::<Vec<_>>(),"confirmedMissingSkillsCovered":r.covers_wajib.iter().chain(&r.covers_opsional).filter_map(|id|skills.iter().find(|s|s.id==*id).map(|s|s.nama.as_str())).collect::<Vec<_>>()})).collect::<Vec<_>>()
     });
     if !missing.is_empty() {
         for _ in 0..2 {
-            if let Ok(v)=s.llm.json("Choose at most 5 priority missing skills, prioritizing required skills and the supplied training coverage. Return JSON {\"priorityIndices\":[0,1]}; use only supplied indices, no prose.",context.clone()).await && let Some(indices)=v["priorityIndices"].as_array(){let selected:Option<Vec<Uuid>>=indices.iter().map(|v|v.as_u64().and_then(|i|missing.get(i as usize).map(|s|s.id))).collect();if let Some(selected)=selected{let candidate=ExplanationPlan{priority_skill_ids:selected};if !candidate.priority_skill_ids.is_empty()&&validate_explanation(&candidate,&m){plan=candidate;fallback=false;break}}}
+            if let Ok(v)=s.llm.json("Choose at most 5 priority missing skills, prioritizing required skills and the supplied training context. Related topics are inferred relevance, never confirmed coverage. Return JSON {\"priorityIndices\":[0,1]}; use only supplied indices, no prose.",context.clone()).await && let Some(indices)=v["priorityIndices"].as_array(){let selected:Option<Vec<Uuid>>=indices.iter().map(|v|v.as_u64().and_then(|i|missing.get(i as usize).map(|s|s.id))).collect();if let Some(selected)=selected{let candidate=ExplanationPlan{priority_skill_ids:selected};if !candidate.priority_skill_ids.is_empty()&&validate_explanation(&candidate,&m){plan=candidate;fallback=false;break}}}
         }
     }
     let profile_text = skills
@@ -733,13 +795,7 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
         .map(|s| s.nama.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    let gap_text = missing
-        .iter()
-        .map(|s| s.nama.as_str())
-        .collect::<Vec<_>>()
-        .join(", ");
     let mut related_jobs = vec![];
-    let mut related_trainings = vec![];
     if !profile_text.is_empty() {
         let vectors = s
             .embedding
@@ -747,19 +803,7 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
             .await?;
         related_jobs = similar(s, "occupations", &vectors[0], vec![m.job.id]).await?;
     }
-    if !gap_text.is_empty() {
-        let vectors = s
-            .embedding
-            .embed(vec![gap_text], EmbeddingKind::Query)
-            .await?;
-        related_trainings = similar(
-            s,
-            "trainings",
-            &vectors[0],
-            ranked.iter().map(|r| r.training.id).collect(),
-        )
-        .await?;
-    }
+    let related_trainings: Vec<Uuid> = trainings.iter().skip(3).map(|t| t.id).collect();
     let related_occupations = browsing::by_ids(&s.pool, "occupations", &related_jobs).await?;
     let related_training_items = browsing::by_ids(&s.pool, "trainings", &related_trainings).await?;
     let institution_ids: Vec<Uuid> = ranked
@@ -786,7 +830,7 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
         .into_iter()
         .collect();
     let card_skills = browsing::by_ids(&s.pool, "skills", &extra_ids).await?;
-    let result = json!({"match":m,"skills":card_skills,"institutions":institutions,"relatedOccupations":related_occupations,"relatedTrainings":related_training_items,"trainings":ranked,"relatedOccupationIds":related_jobs,"relatedTrainingIds":related_trainings,"explanation":explanation(&m,&skills,&plan.priority_skill_ids),"prioritySkillIds":plan.priority_skill_ids,"fallback":fallback,"model":s.llm.model(),"revision":key});
+    let result = json!({"match":m,"skills":card_skills,"institutions":institutions,"relatedOccupations":related_occupations,"relatedTrainings":related_training_items,"trainings":ranked,"trainingEvidence":page["evidence"],"trainingRetrieval":page["retrieval"],"relatedOccupationIds":related_jobs,"relatedTrainingIds":related_trainings,"explanation":explanation(&m,&skills,&plan.priority_skill_ids),"prioritySkillIds":plan.priority_skill_ids,"fallback":fallback,"model":s.llm.model(),"revision":key});
     let mut tx = db::active_tx(&s.pool, a.sub).await?;
     sqlx::query("INSERT INTO analyses(user_id,occupation_id,revision_key,result) SELECT $1,$2,$3,$4 WHERE EXISTS(SELECT 1 FROM users WHERE id=$1 AND revision=$5) AND EXISTS(SELECT 1 FROM catalog_revision WHERE revision=$6) ON CONFLICT(user_id,occupation_id) DO UPDATE SET revision_key=excluded.revision_key,result=excluded.result,created_at=now()").bind(a.sub).bind(id).bind(key).bind(&result).bind(revision).bind(catalog_revision).execute(&mut *tx).await?;
     tx.commit().await?;

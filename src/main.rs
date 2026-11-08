@@ -71,9 +71,6 @@ async fn main() -> std::io::Result<()> {
             "Worker database role initialization failed; run migrations with SUPABASE_DB_URL first",
         )
     })?;
-    careerbridge_be::infrastructure::jobs::start(&c.database_url, job_settings)
-        .await
-        .map_err(std::io::Error::other)?;
     let embedding = LocalEmbedding::load(c.model_cache)
         .await
         .map_err(std::io::Error::other)?;
@@ -107,9 +104,8 @@ async fn main() -> std::io::Result<()> {
         )
         .with_signup_otp(c.signup_otp_enabled),
     );
-    careerbridge_be::presentation::events::start_background(state.clone());
-    tokio::spawn(worker::run(state.clone()));
-    HttpServer::new(move || {
+    let app_state = state.clone();
+    let server = HttpServer::new(move || {
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "PATCH", "DELETE"])
             .allowed_headers(vec![
@@ -131,7 +127,7 @@ async fn main() -> std::io::Result<()> {
             headers = headers.add(("Strict-Transport-Security", "max-age=31536000"));
         }
         App::new()
-            .app_data(web::Data::from(state.clone()))
+            .app_data(web::Data::from(app_state.clone()))
             .app_data(cookie_auth.clone())
             .app_data(
                 web::JsonConfig::default()
@@ -149,7 +145,15 @@ async fn main() -> std::io::Result<()> {
             .configure(http::configure)
     })
     .workers(2)
-    .bind((c.host.as_str(), c.port))?
-    .run()
-    .await
+    .bind((c.host.as_str(), c.port))?;
+
+    // Bind before starting background work. A duplicate server process must not
+    // launch another importer or worker and mutate shared database state.
+    careerbridge_be::infrastructure::jobs::start(&c.database_url, job_settings)
+        .await
+        .map_err(std::io::Error::other)?;
+    careerbridge_be::presentation::events::start_background(state.clone());
+    tokio::spawn(worker::run(state));
+
+    server.run().await
 }

@@ -119,7 +119,7 @@ pub struct Vacancy {
     pub valid_until: Option<DateTime<Utc>>,
 }
 static ROLE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:software\s+(?:engineer\w*|develop\w*|quality\s+assurance)|(?:back[ -]?end|front[ -]?end|full[ -]?stack|mobile|android|ios|web|application)\s+(?:engineer\w*|develop\w*)|(?:[a-z.]+\s+)?developer|devops|devsecops|infraops|site\s+reliability|sre|(?:qa|test|automation)\s+engineer\w*|programmer)\b").unwrap()
+    Regex::new(r"(?i)\b(?:software\s+(?:engineer\w*|develop\w*|quality\s+assurance)|data\s+analyst\w*|(?:back[ -]?end|front[ -]?end|full[ -]?stack|mobile|android|ios|web|application)\s+(?:engineer\w*|develop\w*)|(?:[a-z.]+\s+)?developer|devops|devsecops|infraops|site\s+reliability|sre|(?:qa|test|automation)\s+engineer\w*|programmer)\b").unwrap()
 });
 static EXCLUDE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:sales|recruiter|designer|product\s+manager|business\s+developer|business\s+development)\b").unwrap()
@@ -681,6 +681,8 @@ pub struct VacancyQuery {
     pub city: String,
     #[serde(default)]
     pub source: String,
+    #[serde(default)]
+    pub category: String,
 }
 fn default_page() -> i64 {
     20
@@ -693,6 +695,9 @@ impl VacancyQuery {
             || self.city.len() > 200
             || self.source.len() > 40
             || (!self.source.is_empty() && !SOURCES.iter().any(|s| s.key == self.source))
+            || (!self.category.is_empty()
+                && !["software-engineer", "devops", "data-analyst"]
+                    .contains(&self.category.as_str()))
         {
             return Err(AppError::Invalid("Invalid vacancy page filters"));
         }
@@ -712,8 +717,8 @@ pub async fn page(pool: &PgPool, p: &VacancyQuery) -> Result<Value, AppError> {
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
         .await?;
-    let total:i64=sqlx::query_scalar("SELECT count(*) FROM job_vacancies WHERE ($1='' OR title ILIKE $2 OR company ILIKE $2) AND ($3='' OR lower(city)=lower($3)) AND ($4='' OR source=$4)").bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).fetch_one(&mut *tx).await?;
-    let rows=sqlx::query("SELECT jsonb_build_object('id',id,'source',source,'sourceId',source_id,'company',company,'title',title,'country',country,'city',city,'region',region,'workplace',workplace,'employmentType',employment_type,'description',description,'requirements',requirements,'applyUrl',apply_url,'sourceUrl',source_url,'postedAt',posted_at,'validUntil',valid_until,'lastSeenAt',last_seen_at) data FROM job_vacancies WHERE ($1='' OR title ILIKE $2 OR company ILIKE $2) AND ($3='' OR lower(city)=lower($3)) AND ($4='' OR source=$4) ORDER BY posted_at DESC NULLS LAST,id LIMIT $5 OFFSET $6").bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).bind(p.limit).bind(p.offset).fetch_all(&mut *tx).await?;
+    let total:i64=sqlx::query_scalar("SELECT count(*) FROM job_vacancies WHERE ($1='' OR title ILIKE $2 OR company ILIKE $2) AND ($3='' OR lower(city)=lower($3)) AND ($4='' OR source=$4) AND ($5='' OR ($5='devops' AND title ~* '(devops|devsecops|infraops|site reliability|sre)') OR ($5='data-analyst' AND title ~* '(data[ -]?analyst|business intelligence analyst|bi analyst)') OR ($5='software-engineer' AND title !~* '(devops|devsecops|infraops|site reliability|sre|data[ -]?analyst|business intelligence analyst|bi analyst)'))").bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).bind(&p.category).fetch_one(&mut *tx).await?;
+    let rows=sqlx::query("SELECT jsonb_build_object('id',id,'source',source,'sourceId',source_id,'company',company,'title',title,'category',CASE WHEN title ~* '(devops|devsecops|infraops|site reliability|sre)' THEN 'devops' WHEN title ~* '(data[ -]?analyst|business intelligence analyst|bi analyst)' THEN 'data-analyst' ELSE 'software-engineer' END,'country',country,'city',city,'region',region,'workplace',workplace,'employmentType',employment_type,'description',description,'requirements',requirements,'applyUrl',apply_url,'sourceUrl',source_url,'postedAt',posted_at,'validUntil',valid_until,'lastSeenAt',last_seen_at) data FROM job_vacancies WHERE ($1='' OR title ILIKE $2 OR company ILIKE $2) AND ($3='' OR lower(city)=lower($3)) AND ($4='' OR source=$4) AND ($5='' OR ($5='devops' AND title ~* '(devops|devsecops|infraops|site reliability|sre)') OR ($5='data-analyst' AND title ~* '(data[ -]?analyst|business intelligence analyst|bi analyst)') OR ($5='software-engineer' AND title !~* '(devops|devsecops|infraops|site reliability|sre|data[ -]?analyst|business intelligence analyst|bi analyst)')) ORDER BY posted_at DESC NULLS LAST,id LIMIT $6 OFFSET $7").bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).bind(&p.category).bind(p.limit).bind(p.offset).fetch_all(&mut *tx).await?;
     let items: Vec<Value> = rows.iter().map(|r| r.get("data")).collect();
     tx.commit().await?;
     Ok(serde_json::json!({"items":items,"total":total,"offset":p.offset,"limit":p.limit}))
@@ -786,6 +791,7 @@ mod tests {
             q: "Rust".into(),
             city: "Yogyakarta".into(),
             source: "softwareseni".into(),
+            category: "".into(),
         };
         assert!(page.validate().is_ok());
         page.limit = 101;
@@ -859,6 +865,7 @@ mod tests {
                 q: "Senior".into(),
                 city: "jakarta".into(),
                 source: "grab".into(),
+                category: "".into(),
             },
         )
         .await

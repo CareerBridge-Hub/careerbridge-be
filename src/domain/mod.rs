@@ -156,6 +156,25 @@ pub fn aliases(skills: &[Skill]) -> HashMap<String, Uuid> {
         })
         .collect()
 }
+/// Catalog skills whose name or alias appears in `text` as a whole token sequence.
+pub fn skills_in_text(text: &str, index: &HashMap<String, Uuid>) -> HashSet<Uuid> {
+    let normalized = normalize(text);
+    let tokens: Vec<&str> = normalized.split(' ').filter(|t| !t.is_empty()).collect();
+    let max_n = index
+        .keys()
+        .map(|k| k.split(' ').count())
+        .max()
+        .unwrap_or(0);
+    let mut found = HashSet::new();
+    for i in 0..tokens.len() {
+        for n in 1..=max_n.min(tokens.len() - i) {
+            if let Some(id) = index.get(&tokens[i..i + n].join(" ")) {
+                found.insert(*id);
+            }
+        }
+    }
+    found
+}
 #[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RankedTraining {
@@ -366,6 +385,41 @@ pub fn explanation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn finds_catalog_skills_as_whole_token_sequences() {
+        let (sql, excel, team, cpp, react) = (
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+        );
+        let skill = |id, nama: &str, alias: &[&str]| Skill {
+            id,
+            nama: nama.into(),
+            kategori: "T".into(),
+            alias: alias.iter().map(|a| a.to_string()).collect(),
+        };
+        let index = aliases(&[
+            skill(sql, "SQL", &[]),
+            skill(excel, "Microsoft Excel", &["excel"]),
+            skill(team, "Kerja Tim", &["kerja sama tim"]),
+            skill(cpp, "C++", &[]),
+            skill(react, "React", &["react.js"]),
+        ]);
+        let found = skills_in_text(
+            "Menguasai SQL, EXCEL.\nMampu Kerja-Sama Tim; pengalaman C++/Java.",
+            &index,
+        );
+        assert_eq!(found, HashSet::from([sql, excel, team, cpp]));
+        assert!(skills_in_text("pakai mysqldump, sikap reaktif", &index).is_empty());
+        assert_eq!(
+            skills_in_text("React.js developer", &index),
+            HashSet::from([react])
+        );
+        assert!(skills_in_text("", &index).is_empty());
+        assert!(skills_in_text("SQL", &HashMap::new()).is_empty());
+    }
     #[test]
     fn coverage_is_not_jaccard() {
         let a = Uuid::new_v4();

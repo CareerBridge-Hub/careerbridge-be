@@ -181,6 +181,15 @@ Run pertama langsung jalan; berikutnya tiap 24 jam untuk `openwebninja`, tiap 6 
 | `--once --force` | Jalankan semua sumber sekarang | PER_RUN | ya |
 | `--daemon` | Loop terus (cek tiap 60 detik) | PER_RUN/hari | ya |
 | `--preview` | CSV feed perusahaan ke `.cache/software-jobs/`. Melewati `openwebninja`. | 0 | tidak |
+| `--retag` | Tandai ulang skill semua lowongan aktif dengan alias katalog saat ini | 0 | ya (`vacancy_skills`) |
+
+### Penanda skill lowongan
+
+Setiap import mencari nama dan alias skill katalog di judul + deskripsi + kualifikasi lowongan, lalu menyimpan hasilnya di `vacancy_skills` (penanda lama diganti). Pencocokan memakai urutan token utuh setelah normalisasi yang sama dengan jalur CV: `sql` tidak cocok dengan `mysqldump`, `react` tidak cocok dengan `reaktif`. Skor kecocokan di `/api/v1/me/vacancies` dihitung dari tabel ini.
+
+Jalankan `job-import --retag` sekali setelah migrasi `202611090001_vacancy_skills.sql`, dan setiap kali admin mengubah alias. Tanpa itu, penanda menyusul sendiri saat lowongan di-upsert ulang (≤ 6 jam feed perusahaan, ≤ 7 hari Google Jobs).
+
+Batas: alias pendek atau bermakna umum (`api`, `cs`, `sem`, `lan`) bisa memberi false positive pada teks Bahasa Indonesia. Hapus alias yang bermasalah lewat admin, lalu jalankan `--retag`.
 
 ## 7. Mengelola keyword
 

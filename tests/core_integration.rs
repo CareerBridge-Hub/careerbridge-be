@@ -667,6 +667,53 @@ async fn backend_http_journey() {
         .json(&json!({"nama":"HTTP Journey","pendidikan":"SMK","jurusan":"Administrasi","provinsi":"Jawa Barat","kota":"Bandung","consent":true}))
         .send().await.unwrap();
     assert_eq!(response.status(), 200);
+    // Domicile filter: offline programs only from the user's province, online from anywhere.
+    let tag = format!("Domisili{}", Uuid::new_v4().simple());
+    let (local, remote, online) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    for (id, institution, moda) in [
+        (local, "0388e22a-8181-546b-9e51-3d0d2d8c0a65", "luring"), // BLK Bandung, Jawa Barat
+        (remote, "83eeb1d9-f573-5ad2-a9c5-593369441b1f", "luring"), // LPK Prima Administrasi, DKI Jakarta
+        (online, "a0434ed4-37b7-53f5-9d97-fcd540f924e0", "daring"), // Kelas Digital Indonesia, DKI Jakarta
+    ] {
+        sqlx::query("INSERT INTO trainings(id,institution_id,nama,biaya,moda,durasi,url_daftar,sample) VALUES($1,$2::uuid,$3,0,$4,'1 hari','https://example.test',false)")
+            .bind(id).bind(institution).bind(format!("{tag} {moda}")).bind(moda)
+            .execute(&owner).await.unwrap();
+    }
+    for (filter, expected) in [
+        ("", vec![local, online]),
+        ("&province=DKI%20Jakarta", vec![local, online]),
+        ("&mode=luring", vec![local]),
+        ("&mode=daring", vec![online]),
+    ] {
+        let page: Value = client
+            .get(format!(
+                "{base}/api/v1/me/trainings?limit=10&q={tag}{filter}"
+            ))
+            .bearer_auth(&jwt)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let mut ids: Vec<Uuid> = page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["id"].as_str().unwrap().parse().unwrap())
+            .collect();
+        let mut expected = expected;
+        ids.sort();
+        expected.sort();
+        assert_eq!(ids, expected, "filter {filter:?}");
+    }
+    sqlx::query("DELETE FROM trainings WHERE id=ANY($1)")
+        .bind(vec![local, remote, online])
+        .execute(&owner)
+        .await
+        .unwrap();
     assert_eq!(
         client
             .get(format!("{base}/api/v1/me/vacancies"))

@@ -217,7 +217,8 @@ async fn update_profile(
         .bind(&input.provinsi)
         .fetch_optional(&mut *tx)
         .await?;
-    sqlx::query("UPDATE users SET nama=$2,pendidikan=$3,jurusan=$4,province_id=$5,kota=$6,updated_at=now() WHERE id=$1").bind(a.sub).bind(input.nama.trim()).bind(&input.pendidikan).bind(input.jurusan.trim()).bind(province.ok_or(AppError::Invalid("Provinsi tidak valid."))?).bind(input.kota.trim()).execute(&mut *tx).await?;
+    // A domicile change alters training recommendations, so it invalidates cached analyses.
+    sqlx::query("UPDATE users SET nama=$2,pendidikan=$3,jurusan=$4,revision=revision+(province_id IS DISTINCT FROM $5)::int,province_id=$5,kota=$6,updated_at=now() WHERE id=$1").bind(a.sub).bind(input.nama.trim()).bind(&input.pendidikan).bind(input.jurusan.trim()).bind(province.ok_or(AppError::Invalid("Provinsi tidak valid."))?).bind(input.kota.trim()).execute(&mut *tx).await?;
     tx.commit().await?;
     me(s, a).await
 }
@@ -570,15 +571,15 @@ async fn matches(
 ) -> Result<web::Json<Value>, AppError> {
     Ok(web::Json(browsing::matches(&s.pool, a.sub, &page).await?))
 }
-#[utoipa::path(get,path="/api/v1/me/trainings",summary="One page of filtered training cards with required institutions and skills",params(Browse),responses((status=200,description="Bounded training page",body=TrainingPage)),security(("cookieAuth"=[])))]
+#[utoipa::path(get,path="/api/v1/me/trainings",summary="One page of filtered training cards with required institutions and skills; province is always the user's domicile (online programs included)",params(Browse),responses((status=200,description="Bounded training page",body=TrainingPage)),security(("cookieAuth"=[])))]
 async fn training_page(
     s: web::Data<State>,
     a: Claims,
     page: web::Query<Browse>,
 ) -> Result<web::Json<Value>, AppError> {
     page.validate()?;
-    let tx = db::active_tx(&s.pool, a.sub).await?;
-    tx.commit().await?;
+    let mut page = page.into_inner();
+    page.province = domicile(&s.pool, a.sub).await?;
     let m = if page.recommended {
         if let Some(id) = page.occupation_id {
             Some(browsing::job(&s.pool, a.sub, id).await?)
@@ -604,6 +605,19 @@ async fn training_page(
         .fetch_one(&s.pool).await?;
     result["occupationOptions"] = options;
     Ok(web::Json(result))
+}
+/// Trainings are always limited to the user's domicile province. Online (daring) programs
+/// stay visible because they can be joined from anywhere; `mode` narrows to one or the other.
+async fn domicile(pool: &PgPool, user: Uuid) -> Result<String, AppError> {
+    let mut tx = db::active_tx(pool, user).await?;
+    let province: String = sqlx::query_scalar(
+        "SELECT p.nama FROM users u JOIN provinces p ON p.id=u.province_id WHERE u.id=$1",
+    )
+    .bind(user)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(province)
 }
 #[utoipa::path(get,path="/api/v1/me/summary",summary="Bounded dashboard summary, target, skill labels and training count",responses((status=200,description="At most six top matches plus selected target",body=DashboardSummary)),security(("cookieAuth"=[])))]
 async fn summary(s: web::Data<State>, a: Claims) -> Result<web::Json<Value>, AppError> {
@@ -647,7 +661,7 @@ async fn summary(s: web::Data<State>, a: Claims) -> Result<web::Json<Value>, App
                 .map(|j| j.skill_id)
         })
         .collect();
-    let free:i64=sqlx::query_scalar("SELECT count(*) FROM trainings t WHERE t.aktif AND NOT t.sample AND t.biaya=0 AND EXISTS(SELECT 1 FROM training_skills ts WHERE ts.training_id=t.id AND ts.skill_id=ANY($1))").bind(missing).fetch_one(&s.pool).await?;
+    let free:i64=sqlx::query_scalar("SELECT count(*) FROM trainings t JOIN institutions i ON i.id=t.institution_id JOIN provinces p ON p.id=i.province_id WHERE t.aktif AND NOT t.sample AND t.biaya=0 AND (t.moda='daring' OR p.nama=$2) AND EXISTS(SELECT 1 FROM training_skills ts WHERE ts.training_id=t.id AND ts.skill_id=ANY($1))").bind(missing).bind(domicile(&s.pool, a.sub).await?).fetch_one(&s.pool).await?;
     let ids: Vec<Uuid> = items
         .iter()
         .flat_map(|m| m.job.skills.iter().map(|j| j.skill_id))
@@ -690,7 +704,7 @@ async fn analysis(
 }
 pub(crate) fn analysis_key(s: &State, revision: i64, catalog_revision: i64) -> String {
     format!(
-        "{revision}:{catalog_revision}:{}:{}:analysis-v6-llm-explanation",
+        "{revision}:{catalog_revision}:{}:{}:analysis-v7-domicile-trainings",
         s.embedding.version(),
         s.llm.model()
     )
@@ -752,6 +766,7 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
         &Browse {
             limit: 8,
             recommended: true,
+            province: domicile(&s.pool, a.sub).await?,
             ..Default::default()
         },
         Some(&m),
@@ -892,15 +907,20 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
     Ok(result)
 }
 
-#[utoipa::path(get,path="/api/v1/me/vacancies",summary="One page of published Indonesia software vacancies with application links",params(crate::infrastructure::jobs::VacancyQuery),responses((status=200,description="Items, total, offset and limit; each item includes applyUrl, sourceUrl, country, city and description",body=crate::infrastructure::jobs::VacancyPage),(status=400,body=ErrorResponse),(status=401,body=ErrorResponse)),security(("cookieAuth"=[])))]
+#[utoipa::path(get,path="/api/v1/me/vacancies",summary="One page of published Indonesia vacancies with application links and the caller's skill match",params(crate::infrastructure::jobs::VacancyQuery),responses((status=200,description="Items, total, offset and limit; each item includes applyUrl, sourceUrl, country, city and description",body=crate::infrastructure::jobs::VacancyPage),(status=400,body=ErrorResponse),(status=401,body=ErrorResponse)),security(("cookieAuth"=[])))]
 async fn vacancies(
     s: web::Data<State>,
     a: Claims,
     p: web::Query<crate::infrastructure::jobs::VacancyQuery>,
 ) -> Result<web::Json<Value>, AppError> {
     p.validate()?;
-    db::active_tx(&s.pool, a.sub).await?.commit().await?;
+    let mut tx = db::active_tx(&s.pool, a.sub).await?;
+    let have: Vec<Uuid> = sqlx::query_scalar("SELECT skill_id FROM user_skills WHERE user_id=$1")
+        .bind(a.sub)
+        .fetch_all(&mut *tx)
+        .await?;
+    tx.commit().await?;
     Ok(web::Json(
-        crate::infrastructure::jobs::page(&s.pool, &p).await?,
+        crate::infrastructure::jobs::page(&s.pool, &have, &p).await?,
     ))
 }

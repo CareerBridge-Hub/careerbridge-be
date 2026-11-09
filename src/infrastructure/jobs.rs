@@ -1,12 +1,17 @@
 //! Bounded, cookie-free employer vacancy importer. No credentials sent to sources.
-use super::{config, db, error::AppError};
+use super::{browsing, config, db, error::AppError};
+use crate::domain::{aliases, skills_in_text};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{PgPool, Row};
-use std::{collections::HashSet, sync::LazyLock, time::Duration};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    sync::LazyLock,
+    time::Duration,
+};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug)]
@@ -860,6 +865,7 @@ async fn persist(
     queue_stats: &[(Uuid, i32)],
     interval: Duration,
 ) -> Result<(), AppError> {
+    let index = aliases(&db::skills(pool).await?);
     let mut tx = pool.begin().await?;
     let valid = sqlx::query_scalar::<_, bool>(
         "SELECT run_id=$2 AND lease_until>now() FROM job_sources WHERE key=$1 FOR UPDATE",
@@ -894,6 +900,8 @@ async fn persist(
         // A missing catalog occupation leaves occupation_id NULL rather than failing the import.
         sqlx::query("INSERT INTO job_vacancies(id,source,source_id,company,title,country,city,region,workplace,employment_type,description,requirements,apply_url,source_url,posted_at,valid_until,last_seen_run,occupation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18,(SELECT id FROM occupations WHERE nama=$19))) ON CONFLICT(source,source_id) DO UPDATE SET company=EXCLUDED.company,title=EXCLUDED.title,country=EXCLUDED.country,city=EXCLUDED.city,region=EXCLUDED.region,workplace=EXCLUDED.workplace,employment_type=EXCLUDED.employment_type,description=EXCLUDED.description,requirements=EXCLUDED.requirements,apply_url=EXCLUDED.apply_url,source_url=EXCLUDED.source_url,posted_at=EXCLUDED.posted_at,valid_until=EXCLUDED.valid_until,last_seen_run=EXCLUDED.last_seen_run,occupation_id=COALESCE(EXCLUDED.occupation_id,job_vacancies.occupation_id),last_seen_at=now(),updated_at=now(),status='active'")
             .bind(id).bind(source.key).bind(&job.source_id).bind(&job.company).bind(&job.title).bind(&job.country).bind(&job.city).bind(&job.region).bind(&job.workplace).bind(&job.employment_type).bind(&job.description).bind(&job.requirements).bind(&job.apply_url).bind(&job.source_url).bind(job.posted_at).bind(job.valid_until).bind(run).bind(job.occupation_id).bind(feed_occupation(&job.title)).execute(&mut *tx).await?;
+        let text = format!("{}\n{}\n{}", job.title, job.description, job.requirements);
+        tag_vacancy(&mut tx, id, &text, &index).await?;
     }
     if !queue_stats.is_empty() {
         let (ids, counts): (Vec<Uuid>, Vec<i32>) = queue_stats.iter().copied().unzip();
@@ -906,6 +914,49 @@ async fn persist(
     sqlx::query("UPDATE job_sources SET last_success_at=now(),last_count=$3,last_error=NULL,lease_until=NULL,run_id=NULL,next_run_at=now()+make_interval(secs=>$4) WHERE key=$1 AND run_id=$2").bind(source.key).bind(run).bind(jobs.len() as i32).bind(interval.as_secs() as f64).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(())
+}
+/// Replaces a vacancy's skill tags with the catalog skills its text mentions.
+async fn tag_vacancy(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    vacancy: Uuid,
+    text: &str,
+    index: &HashMap<String, Uuid>,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM vacancy_skills WHERE vacancy_id=$1")
+        .bind(vacancy)
+        .execute(&mut **tx)
+        .await?;
+    let skills: Vec<Uuid> = skills_in_text(text, index).into_iter().collect();
+    if !skills.is_empty() {
+        sqlx::query("INSERT INTO vacancy_skills(vacancy_id,skill_id) SELECT $1,unnest($2::uuid[])")
+            .bind(vacancy)
+            .bind(skills)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+/// Re-tags every active vacancy against the current alias catalog; returns rows tagged.
+pub async fn retag_all(pool: &PgPool) -> Result<u64, AppError> {
+    let index = aliases(&db::skills(pool).await?);
+    // ponytail: one transaction over all active rows; batch by id ranges if active vacancies exceed ~50k.
+    let mut tx = pool.begin().await?;
+    let rows: Vec<(Uuid, String, String, String)> = sqlx::query_as(
+        "SELECT id,title,description,requirements FROM job_vacancies WHERE status='active'",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    for (id, title, description, requirements) in &rows {
+        tag_vacancy(
+            &mut tx,
+            *id,
+            &format!("{title}\n{description}\n{requirements}"),
+            &index,
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(rows.len() as u64)
 }
 pub async fn run_pass(pool: &PgPool, settings: &Settings, force: bool) -> bool {
     let Ok(collector) = Collector::new(settings.google.clone()) else {
@@ -950,6 +1001,10 @@ pub struct VacancyItem {
     #[serde(flatten)]
     pub vacancy: Vacancy,
     pub last_seen_at: DateTime<Utc>,
+    /// Percent of the vacancy's detected skills the caller has; null when none detected.
+    pub match_score: Option<i64>,
+    pub owned_skill_ids: Vec<Uuid>,
+    pub missing_skill_ids: Vec<Uuid>,
 }
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct VacancyPage {
@@ -957,6 +1012,8 @@ pub struct VacancyPage {
     pub total: i64,
     pub offset: i64,
     pub limit: i64,
+    /// Labels for every skill id referenced by the items on this page.
+    pub skills: Vec<crate::domain::Skill>,
 }
 #[derive(Deserialize, utoipa::IntoParams)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -976,6 +1033,9 @@ pub struct VacancyQuery {
     /// Occupation (job category) id from `occupationOptions`; empty = all.
     #[serde(default)]
     pub occupation: String,
+    /// `match` = best skill match first; empty or `recent` = newest first.
+    #[serde(default)]
+    pub sort: String,
 }
 fn default_page() -> i64 {
     20
@@ -990,6 +1050,7 @@ impl VacancyQuery {
             || self.city.len() > 200
             || self.source.len() > 40
             || (!self.source.is_empty() && !SOURCES.iter().any(|s| s.key == self.source))
+            || !["", "recent", "match"].contains(&self.sort.as_str())
         {
             return Err(invalid);
         }
@@ -1001,7 +1062,8 @@ impl VacancyQuery {
             .map_err(|_| invalid)
     }
 }
-pub async fn page(pool: &PgPool, p: &VacancyQuery) -> Result<Value, AppError> {
+/// `have` = the caller's catalog skill ids; scores and `sort=match` are computed against it.
+pub async fn page(pool: &PgPool, have: &[Uuid], p: &VacancyQuery) -> Result<Value, AppError> {
     let occupation = p.validate()?;
     let pattern = format!(
         "%{}%",
@@ -1025,15 +1087,28 @@ pub async fn page(pool: &PgPool, p: &VacancyQuery) -> Result<Value, AppError> {
     .bind(occupation)
     .fetch_one(&mut *tx)
     .await?;
-    let rows = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT jsonb_build_object('id',v.id,'source',v.source,'sourceId',v.source_id,'company',v.company,'title',v.title,'occupationId',v.occupation_id,'occupationName',o.nama,'country',v.country,'city',v.city,'region',v.region,'workplace',v.workplace,'employmentType',v.employment_type,'description',v.description,'requirements',v.requirements,'applyUrl',v.apply_url,'sourceUrl',v.source_url,'postedAt',v.posted_at,'validUntil',v.valid_until,'lastSeenAt',v.last_seen_at) data FROM job_vacancies v LEFT JOIN occupations o ON o.id=v.occupation_id WHERE {FILTER} ORDER BY v.posted_at DESC NULLS LAST,v.id LIMIT $6 OFFSET $7")))
-        .bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).bind(occupation).bind(p.limit).bind(p.offset).fetch_all(&mut *tx).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT jsonb_build_object('id',v.id,'source',v.source,'sourceId',v.source_id,'company',v.company,'title',v.title,'occupationId',v.occupation_id,'occupationName',o.nama,'country',v.country,'city',v.city,'region',v.region,'workplace',v.workplace,'employmentType',v.employment_type,'description',v.description,'requirements',v.requirements,'applyUrl',v.apply_url,'sourceUrl',v.source_url,'postedAt',v.posted_at,'validUntil',v.valid_until,'lastSeenAt',v.last_seen_at,'matchScore',m.score,'ownedSkillIds',m.owned,'missingSkillIds',m.missing) data FROM job_vacancies v LEFT JOIN occupations o ON o.id=v.occupation_id LEFT JOIN LATERAL (SELECT round(100.0*count(*) FILTER (WHERE skill_id=ANY($8))/nullif(count(*),0))::int AS score,coalesce(array_agg(skill_id ORDER BY skill_id) FILTER (WHERE skill_id=ANY($8)),'{{}}') AS owned,coalesce(array_agg(skill_id ORDER BY skill_id) FILTER (WHERE NOT skill_id=ANY($8)),'{{}}') AS missing FROM vacancy_skills WHERE vacancy_id=v.id) m ON true WHERE {FILTER} ORDER BY CASE WHEN $9='match' THEN m.score END DESC NULLS LAST,v.posted_at DESC NULLS LAST,v.id LIMIT $6 OFFSET $7")))
+        // ponytail: lateral score per filtered row; precompute per-user scores if active vacancies exceed ~20k.
+        .bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).bind(occupation).bind(p.limit).bind(p.offset).bind(have).bind(&p.sort).fetch_all(&mut *tx).await?;
     let items: Vec<Value> = rows.iter().map(|r| r.get("data")).collect();
     // Every catalog occupation is a filter option, even before its first vacancy arrives.
     let options: Value = sqlx::query_scalar("SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'nama',nama) ORDER BY nama),'[]') FROM occupations")
         .fetch_one(&mut *tx).await?;
     tx.commit().await?;
+    let skill_ids: Vec<Uuid> = items
+        .iter()
+        .flat_map(|i| {
+            ["ownedSkillIds", "missingSkillIds"]
+                .into_iter()
+                .flat_map(move |k| i[k].as_array().into_iter().flatten())
+        })
+        .filter_map(|v| v.as_str()?.parse().ok())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let skills = browsing::by_ids(pool, "skills", &skill_ids).await?;
     Ok(
-        serde_json::json!({"items":items,"total":total,"offset":p.offset,"limit":p.limit,"occupationOptions":options}),
+        serde_json::json!({"items":items,"total":total,"offset":p.offset,"limit":p.limit,"occupationOptions":options,"skills":skills}),
     )
 }
 
@@ -1191,6 +1266,7 @@ mod tests {
             city: "Yogyakarta".into(),
             source: "softwareseni".into(),
             occupation: "".into(),
+            sort: "".into(),
         };
         assert!(page.validate().is_ok());
         page.limit = 101;
@@ -1229,6 +1305,8 @@ mod tests {
         assert!(vacancy_query("limit=abc").is_err());
         let page = vacancy_query("occupation=data-analyst").unwrap();
         assert!(page.validate().is_err(), "occupation must be a UUID");
+        assert!(vacancy_query("sort=popular").unwrap().validate().is_err());
+        assert!(vacancy_query("sort=match").unwrap().validate().is_ok());
     }
     #[tokio::test]
     #[ignore = "requires a disposable migrated TEST_DATABASE_URL; never reads .env"]
@@ -1291,6 +1369,7 @@ mod tests {
         assert_eq!(count, 1);
         let page = page(
             &api,
+            &[],
             &VacancyQuery {
                 offset: 0,
                 limit: 1,
@@ -1298,6 +1377,7 @@ mod tests {
                 city: "jakarta".into(),
                 source: "grab".into(),
                 occupation: "".into(),
+                sort: "".into(),
             },
         )
         .await

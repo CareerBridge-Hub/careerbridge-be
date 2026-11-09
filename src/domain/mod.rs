@@ -457,6 +457,50 @@ mod tests {
             &m
         ));
     }
+    /// Proposal Tabel 4.3: (wajib, opsional, wajib owned, opsional owned) -> rounded score.
+    #[test]
+    fn weighted_score_matches_manual_cases() {
+        let cases = [
+            (5, 4, 3, 2, 57),
+            (5, 3, 5, 3, 100),
+            (5, 4, 0, 0, 0),
+            (4, 4, 4, 0, 67),
+            (4, 3, 2, 2, 55),
+            (4, 4, 3, 3, 75),
+            (5, 3, 2, 1, 38),
+            (4, 4, 1, 3, 42),
+            (4, 3, 3, 1, 64),
+            (4, 3, 3, 2, 73),
+        ];
+        for (w, o, hw, ho, expected) in cases {
+            let wajib: Vec<Uuid> = (0..w).map(|_| Uuid::new_v4()).collect();
+            let opsional: Vec<Uuid> = (0..o).map(|_| Uuid::new_v4()).collect();
+            let skills = wajib
+                .iter()
+                .map(|id| (id, "wajib"))
+                .chain(opsional.iter().map(|id| (id, "opsional")))
+                .map(|(id, tipe)| JobSkill {
+                    skill_id: *id,
+                    tipe: tipe.into(),
+                })
+                .collect();
+            let job = Occupation {
+                id: Uuid::new_v4(),
+                nama: "Kasus".into(),
+                kode_kbji: "0000".into(),
+                bidang: "Uji".into(),
+                deskripsi: "".into(),
+                skills,
+            };
+            let have: HashSet<Uuid> = wajib[..hw].iter().chain(&opsional[..ho]).copied().collect();
+            let m = match_job(&job, &have);
+            let earned = (hw * 2 + ho) as i64;
+            let total = (w * 2 + o) as i64;
+            assert_eq!((m.earned, m.total, m.score), (earned, total, expected));
+            assert_eq!(m.missing_wajib.len(), w - hw);
+            assert_eq!(m.missing_opsional.len(), o - ho);
+        }
+    }
     #[test]
     fn explanation_names_only_catalog_skills_and_real_numbers() {
         let skill = |nama: &str| Skill {

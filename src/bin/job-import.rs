@@ -1,4 +1,4 @@
-//! Use --preview, --once [--force], --daemon, --status, or --test-query "<keyword>" ["<title regex>"].
+//! Use --preview, --once [--force], --daemon, --status, --retag, or --test-query "<keyword>" ["<title regex>"].
 //! Never needs Supabase Auth/LLM secrets.
 use careerbridge_be::infrastructure::jobs::{self, Collector, Settings};
 use std::io::Write;
@@ -73,6 +73,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let status:serde_json::Value=sqlx::query_scalar("SELECT jsonb_build_object('sources',(SELECT jsonb_agg(j ORDER BY key) FROM (SELECT s.key,s.last_success_at,s.last_count,s.last_error,s.next_run_at,s.lease_until,(SELECT count(*) FROM job_vacancies v WHERE v.source=s.key AND status='active') active_count FROM job_sources s) j),'searchQueue',(SELECT COALESCE(jsonb_agg(q ORDER BY q.enabled DESC,q.last_run_at NULLS FIRST,q.keyword),'[]') FROM (SELECT q.keyword,o.nama occupation,q.enabled,q.last_run_at,q.last_count,q.zero_streak,(SELECT count(*) FROM job_vacancies v WHERE v.occupation_id=q.occupation_id AND v.status='active') active_count FROM job_search_queries q JOIN occupations o ON o.id=q.occupation_id) q))").fetch_one(&pool).await?;
             println!("{}", serde_json::to_string_pretty(&status)?);
         }
+        Some("--retag") if args.len() == 1 => {
+            let pool = jobs::importer_pool().await?;
+            let n = jobs::retag_all(&pool).await?;
+            println!("{}", serde_json::json!({ "retagged": n }));
+        }
         // Keyword research: one billed request, no database access.
         Some("--test-query") if (2..=3).contains(&args.len()) => {
             let collector = Collector::new(settings.google.clone())?;
@@ -121,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "Usage: job-import --preview | --once [--force] | --daemon | --status | --test-query <keyword> [title-regex]".into(),
+                "Usage: job-import --preview | --once [--force] | --daemon | --status | --retag | --test-query <keyword> [title-regex]".into(),
             );
         }
     }

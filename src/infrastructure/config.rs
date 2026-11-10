@@ -144,10 +144,13 @@ pub fn database_options(url: &str) -> io::Result<sqlx::postgres::PgConnectOption
         let options = options.ssl_mode(sqlx::postgres::PgSslMode::VerifyFull);
         return Ok(if custom_root {
             options
+        } else if let Ok(pem) = env::var("SUPABASE_DB_CA_CERT") {
+            if pem.trim().is_empty() {
+                return Err(io::Error::other("SUPABASE_DB_CA_CERT must not be empty"));
+            }
+            options.ssl_root_cert_from_pem(pem.into_bytes())
         } else {
-            options.ssl_root_cert_from_pem(
-                include_bytes!("../../certs/supabase-root-2021.crt").to_vec(),
-            )
+            options
         });
     }
     Ok(options)

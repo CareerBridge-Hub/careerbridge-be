@@ -22,10 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .iter()
         .map(|s| Skill {
-            id: Uuid::new_v5(
-                &Uuid::NAMESPACE_URL,
-                format!("careerbridge:{}", s["id"].as_str().unwrap()).as_bytes(),
-            ),
+            id: Uuid::parse_str(s["id"].as_str().unwrap()).unwrap(),
             nama: s["nama"].as_str().unwrap().into(),
             kategori: s["kategori"].as_str().unwrap().into(),
             alias: serde_json::from_value(s["alias"].clone()).unwrap(),

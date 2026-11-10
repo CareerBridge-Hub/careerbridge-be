@@ -1,0 +1,640 @@
+{
+  "skills": [
+    {
+      "id": "f20b1162-8369-583d-b5cb-e094a64e648e",
+      "nama": "Komunikasi",
+      "kategori": "Umum",
+      "alias": [
+        "komunikasi efektif",
+        "communication",
+        "communication skills"
+      ]
+    },
+    {
+      "id": "7686c0d5-dde1-5f9b-abb7-b69a58a1c6ef",
+      "nama": "Kerja Tim",
+      "kategori": "Umum",
+      "alias": [
+        "teamwork",
+        "kerja sama tim",
+        "kerjasama tim"
+      ]
+    },
+    {
+      "id": "51a77987-0e20-5def-933b-5d018177d420",
+      "nama": "Manajemen Waktu",
+      "kategori": "Umum",
+      "alias": [
+        "time management"
+      ]
+    },
+    {
+      "id": "d02270fe-1967-5e5c-b47e-c234fdb84388",
+      "nama": "Pemecahan Masalah",
+      "kategori": "Umum",
+      "alias": [
+        "problem solving"
+      ]
+    },
+    {
+      "id": "aa6998d7-713d-56e9-b581-c242beaee252",
+      "nama": "Bahasa Inggris",
+      "kategori": "Umum",
+      "alias": [
+        "english",
+        "inggris",
+        "toefl"
+      ]
+    },
+    {
+      "id": "e833edf1-103d-55d6-af5d-23ee5cfee34e",
+      "nama": "Microsoft Excel",
+      "kategori": "Perkantoran",
+      "alias": [
+        "excel",
+        "ms excel",
+        "ms excel",
+        "spreadsheet"
+      ]
+    },
+    {
+      "id": "3ad1fcaf-762f-53e8-b693-068d7a2e76d9",
+      "nama": "Microsoft Word",
+      "kategori": "Perkantoran",
+      "alias": [
+        "word",
+        "ms word",
+        "ms word"
+      ]
+    },
+    {
+      "id": "c4c23467-b9d7-5954-9fce-5a5d3a5b7329",
+      "nama": "Microsoft PowerPoint",
+      "kategori": "Perkantoran",
+      "alias": [
+        "powerpoint",
+        "ppt",
+        "ms powerpoint"
+      ]
+    },
+    {
+      "id": "befbd4ef-c625-5262-9253-707434a63397",
+      "nama": "Google Workspace",
+      "kategori": "Perkantoran",
+      "alias": [
+        "google docs",
+        "google sheets",
+        "g suite",
+        "gsuite"
+      ]
+    },
+    {
+      "id": "f9f8dcca-b72c-5e4b-9d55-914a788cbfa8",
+      "nama": "Administrasi Perkantoran",
+      "kategori": "Perkantoran",
+      "alias": [
+        "administrasi",
+        "admin kantor",
+        "office administration"
+      ]
+    },
+    {
+      "id": "880d6227-2da6-5d2d-9fa8-e57e38718e66",
+      "nama": "Pengarsipan",
+      "kategori": "Perkantoran",
+      "alias": [
+        "arsip",
+        "filing",
+        "kearsipan"
+      ]
+    },
+    {
+      "id": "bb485c92-ff79-5d52-bb09-7c7c1bc871d5",
+      "nama": "Korespondensi Bisnis",
+      "kategori": "Perkantoran",
+      "alias": [
+        "korespondensi",
+        "surat menyurat",
+        "menulis surat resmi"
+      ]
+    },
+    {
+      "id": "4af02f9f-2d61-5dd9-9bc4-051c807e9e82",
+      "nama": "Entri Data",
+      "kategori": "Perkantoran",
+      "alias": [
+        "data entry",
+        "input data"
+      ]
+    },
+    {
+      "id": "c5293b90-4cf7-5135-a110-266ccedcaa53",
+      "nama": "Akuntansi Dasar",
+      "kategori": "Keuangan",
+      "alias": [
+        "akuntansi",
+        "accounting",
+        "pembukuan",
+        "jurnal umum"
+      ]
+    },
+    {
+      "id": "35828b09-7ab7-586c-afb8-32aae3e66a9c",
+      "nama": "Laporan Keuangan",
+      "kategori": "Keuangan",
+      "alias": [
+        "financial report",
+        "financial statement"
+      ]
+    },
+    {
+      "id": "c5c9287f-db6f-5d5a-97b1-056829cb9868",
+      "nama": "Software Akuntansi",
+      "kategori": "Keuangan",
+      "alias": [
+        "accurate",
+        "myob",
+        "zahir",
+        "jurnal id"
+      ]
+    },
+    {
+      "id": "3edcb4ca-77c3-5d4a-b27d-d1ebceae2b50",
+      "nama": "Perpajakan Dasar",
+      "kategori": "Keuangan",
+      "alias": [
+        "pajak",
+        "perpajakan",
+        "brevet",
+        "e faktur"
+      ]
+    },
+    {
+      "id": "656e0d5c-43a2-5d8c-b4c3-d0eb9b64ab86",
+      "nama": "Rekonsiliasi Bank",
+      "kategori": "Keuangan",
+      "alias": [
+        "bank reconciliation"
+      ]
+    },
+    {
+      "id": "bc001e51-4714-578e-a378-a6f9d523e19e",
+      "nama": "Penagihan dan Faktur",
+      "kategori": "Keuangan",
+      "alias": [
+        "invoicing",
+        "invoice",
+        "faktur",
+        "penagihan"
+      ]
+    },
+    {
+      "id": "ceab27da-03d9-50af-b049-a71d65bb756c",
+      "nama": "Layanan Pelanggan",
+      "kategori": "Layanan Pelanggan",
+      "alias": [
+        "customer service",
+        "pelayanan pelanggan",
+        "cs"
+      ]
+    },
+    {
+      "id": "c9624ad7-6a41-5100-810a-dc255242c9a4",
+      "nama": "Penanganan Keluhan",
+      "kategori": "Layanan Pelanggan",
+      "alias": [
+        "complaint handling",
+        "menangani komplain"
+      ]
+    },
+    {
+      "id": "04075436-d0b0-510a-80db-2c675716df1a",
+      "nama": "CRM",
+      "kategori": "Layanan Pelanggan",
+      "alias": [
+        "customer relationship management",
+        "salesforce",
+        "hubspot"
+      ]
+    },
+    {
+      "id": "6abcc256-e27e-5754-9d8a-a2b51de03594",
+      "nama": "Pemasaran Media Sosial",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "social media",
+        "social media marketing",
+        "sosmed",
+        "instagram marketing"
+      ]
+    },
+    {
+      "id": "bb0649d8-41b3-5389-a687-b9efed95097f",
+      "nama": "Copywriting",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "menulis iklan",
+        "content writing"
+      ]
+    },
+    {
+      "id": "73791283-669e-53cd-b356-ce639bb144d7",
+      "nama": "SEO",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "search engine optimization"
+      ]
+    },
+    {
+      "id": "77845551-70b4-525f-a38b-c9dab8ee17a0",
+      "nama": "Google Analytics",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "ga4",
+        "analytics"
+      ]
+    },
+    {
+      "id": "7994613f-e797-5d29-a579-7df6399d70f6",
+      "nama": "Iklan Digital",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "google ads",
+        "meta ads",
+        "facebook ads",
+        "sem",
+        "digital ads"
+      ]
+    },
+    {
+      "id": "ce425044-e5fa-54d6-87e2-698bc41c2dc0",
+      "nama": "Desain Konten",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "canva",
+        "content design",
+        "desain feed"
+      ]
+    },
+    {
+      "id": "99c98598-cb4e-5cc3-ab1c-4391bc6d63c9",
+      "nama": "Email Marketing",
+      "kategori": "Pemasaran Digital",
+      "alias": [
+        "mailchimp",
+        "email blast"
+      ]
+    },
+    {
+      "id": "2a33bd32-6718-5991-a033-e7dd84e22587",
+      "nama": "SQL",
+      "kategori": "Data",
+      "alias": [
+        "mysql",
+        "postgresql",
+        "query database",
+        "database query"
+      ]
+    },
+    {
+      "id": "6a630561-2e6d-5665-a0b0-1b94f1576cf1",
+      "nama": "Python",
+      "kategori": "Data",
+      "alias": [
+        "python3",
+        "pandas"
+      ]
+    },
+    {
+      "id": "0f7d4e1b-0b3d-5460-9da3-d9da671e6533",
+      "nama": "Statistika",
+      "kategori": "Data",
+      "alias": [
+        "statistik",
+        "statistics",
+        "statistika dasar"
+      ]
+    },
+    {
+      "id": "4161a7fa-e632-59ee-900d-c7c7d0fa106e",
+      "nama": "Visualisasi Data",
+      "kategori": "Data",
+      "alias": [
+        "data visualization",
+        "dashboard",
+        "data viz"
+      ]
+    },
+    {
+      "id": "5f498f58-bba3-52b0-b3ea-36d289b87787",
+      "nama": "Pembersihan Data",
+      "kategori": "Data",
+      "alias": [
+        "data cleaning",
+        "data wrangling"
+      ]
+    },
+    {
+      "id": "6e42002f-6530-51a2-9c08-935996083814",
+      "nama": "Power BI",
+      "kategori": "Data",
+      "alias": [
+        "powerbi",
+        "ms power bi"
+      ]
+    },
+    {
+      "id": "2c326171-cfe6-52ac-b851-94af80bb4415",
+      "nama": "Tableau",
+      "kategori": "Data",
+      "alias": []
+    },
+    {
+      "id": "e6f52f32-d53c-535e-9ce6-620c96bb8fd9",
+      "nama": "HTML",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "html5"
+      ]
+    },
+    {
+      "id": "9f76b8df-a5de-58ba-b7de-e23eab13d92f",
+      "nama": "CSS",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "css3",
+        "tailwind",
+        "bootstrap"
+      ]
+    },
+    {
+      "id": "19273b8c-10a1-51f5-9984-2ed6b16bb9f8",
+      "nama": "JavaScript",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "js",
+        "javascript es6",
+        "es6"
+      ]
+    },
+    {
+      "id": "4f7c05ee-9dfa-5309-a849-6470385901af",
+      "nama": "TypeScript",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "ts"
+      ]
+    },
+    {
+      "id": "b04e1048-78e7-5fe6-94c3-02714d07c544",
+      "nama": "React",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "reactjs",
+        "react js"
+      ]
+    },
+    {
+      "id": "3c1c1e28-36ac-5858-8491-3afa85460f25",
+      "nama": "Node.js",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "node",
+        "nodejs",
+        "express"
+      ]
+    },
+    {
+      "id": "fa52a36c-12af-54d5-a77d-11a87ad65d0b",
+      "nama": "PHP",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "laravel",
+        "codeigniter"
+      ]
+    },
+    {
+      "id": "38509d8d-92c3-5c63-8627-4e4832834da8",
+      "nama": "Git",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "github",
+        "gitlab",
+        "version control"
+      ]
+    },
+    {
+      "id": "957cb236-3563-5f88-b0d4-1fc57c051c99",
+      "nama": "REST API",
+      "kategori": "Pengembangan Web",
+      "alias": [
+        "api",
+        "restful api",
+        "rest"
+      ]
+    },
+    {
+      "id": "9f617e0f-2d80-51fc-8608-faca48a48567",
+      "nama": "Figma",
+      "kategori": "Desain",
+      "alias": []
+    },
+    {
+      "id": "026123c2-4960-5363-b71c-4402232a7b65",
+      "nama": "Desain UI",
+      "kategori": "Desain",
+      "alias": [
+        "ui design",
+        "user interface design",
+        "ui designer"
+      ]
+    },
+    {
+      "id": "480147e1-56a5-57b1-ad44-1c85e2764cb7",
+      "nama": "Wireframing",
+      "kategori": "Desain",
+      "alias": [
+        "wireframe"
+      ]
+    },
+    {
+      "id": "4a657c92-c354-5fca-8be0-fd122f427aa5",
+      "nama": "Prototyping",
+      "kategori": "Desain",
+      "alias": [
+        "prototype",
+        "prototipe"
+      ]
+    },
+    {
+      "id": "2c24f9aa-1285-5579-b7c0-628b0a329371",
+      "nama": "Riset Pengguna",
+      "kategori": "Desain",
+      "alias": [
+        "user research",
+        "ux research",
+        "usability testing"
+      ]
+    },
+    {
+      "id": "0bb3cea1-9c8c-565e-9b5f-3bcab9f56f61",
+      "nama": "Adobe Illustrator",
+      "kategori": "Desain",
+      "alias": [
+        "illustrator",
+        "ai design"
+      ]
+    },
+    {
+      "id": "150e4887-33cd-5cc4-877e-10318e2aa96e",
+      "nama": "Troubleshooting Hardware",
+      "kategori": "Infrastruktur TI",
+      "alias": [
+        "perbaikan komputer",
+        "hardware repair",
+        "servis komputer"
+      ]
+    },
+    {
+      "id": "5791db62-6c8f-5089-a459-de5b42271e82",
+      "nama": "Instalasi Sistem Operasi",
+      "kategori": "Infrastruktur TI",
+      "alias": [
+        "instal windows",
+        "install os",
+        "instalasi windows",
+        "linux"
+      ]
+    },
+    {
+      "id": "f3249580-5ed9-51f6-9071-a5777467d7ef",
+      "nama": "Jaringan Komputer",
+      "kategori": "Infrastruktur TI",
+      "alias": [
+        "networking",
+        "lan",
+        "tcp ip",
+        "tcp ip"
+      ]
+    },
+    {
+      "id": "e8d91abe-8568-5b81-977a-d5b9920db2ba",
+      "nama": "Helpdesk TI",
+      "kategori": "Infrastruktur TI",
+      "alias": [
+        "it helpdesk",
+        "it support",
+        "technical support"
+      ]
+    },
+    {
+      "id": "d3a22956-994b-5521-a7fc-fa133f9cb7dc",
+      "nama": "MikroTik",
+      "kategori": "Infrastruktur TI",
+      "alias": [
+        "mtcna",
+        "routerboard"
+      ]
+    },
+    {
+      "id": "cea20c25-2de6-596f-bbc8-0a9403c5850c",
+      "nama": "Keamanan Jaringan Dasar",
+      "kategori": "Infrastruktur TI",
+      "alias": [
+        "network security",
+        "keamanan siber dasar"
+      ]
+    },
+    {
+      "id": "e1175fe9-c1ce-5ccb-a08b-814771f01aa0",
+      "nama": "K3 Dasar",
+      "kategori": "Produksi",
+      "alias": [
+        "k3",
+        "keselamatan kerja",
+        "keselamatan dan kesehatan kerja",
+        "hse"
+      ]
+    },
+    {
+      "id": "79e9404a-87aa-50c9-b70a-801a0d5ef80a",
+      "nama": "Operasi Forklift",
+      "kategori": "Produksi",
+      "alias": [
+        "forklift",
+        "sio forklift",
+        "operator forklift"
+      ]
+    },
+    {
+      "id": "e5e71687-a0b1-577b-a67b-034e23483a20",
+      "nama": "Pengoperasian Mesin Produksi",
+      "kategori": "Produksi",
+      "alias": [
+        "operator mesin",
+        "operasi mesin",
+        "mesin produksi",
+        "mesin cnc"
+      ]
+    },
+    {
+      "id": "1811c001-6308-54b1-be3a-2ef94715ea54",
+      "nama": "Pengendalian Kualitas",
+      "kategori": "Produksi",
+      "alias": [
+        "quality control",
+        "qc",
+        "quality check"
+      ]
+    },
+    {
+      "id": "5bada55f-45fb-5b95-a7a5-2910321929bc",
+      "nama": "Membaca Gambar Teknik",
+      "kategori": "Produksi",
+      "alias": [
+        "gambar teknik",
+        "technical drawing",
+        "baca gambar teknik"
+      ]
+    },
+    {
+      "id": "04bad59b-e193-5386-a742-c386a897fba4",
+      "nama": "Prinsip 5S",
+      "kategori": "Produksi",
+      "alias": [
+        "5s",
+        "5r",
+        "kaizen 5s"
+      ]
+    },
+    {
+      "id": "cd9a99ca-745f-5d51-8d24-de4327ee210f",
+      "nama": "Lean Manufacturing",
+      "kategori": "Produksi",
+      "alias": [
+        "lean",
+        "kaizen"
+      ]
+    },
+    {
+      "id": "66978a06-2a7b-5495-8e04-59bd7154b9b8",
+      "nama": "Pencatatan Hasil Produksi",
+      "kategori": "Produksi",
+      "alias": [
+        "laporan produksi",
+        "pencatatan produksi",
+        "production report"
+      ]
+    },
+    {
+      "id": "9ee3c81a-fd16-5e57-9822-1d02702f573d",
+      "nama": "Perawatan Mesin Dasar",
+      "kategori": "Produksi",
+      "alias": [
+        "maintenance",
+        "perawatan mesin",
+        "preventive maintenance"
+      ]
+    }
+  ]
+}

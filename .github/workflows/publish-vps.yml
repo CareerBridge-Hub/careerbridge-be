@@ -13,10 +13,6 @@ concurrency:
   group: publish-vps-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CONTAINER_NAME: careerbridge-be
-  APP_PORT: 8080
-
 jobs:
   migrate:
     runs-on: ubuntu-latest
@@ -73,10 +69,15 @@ jobs:
     needs: [build, migrate]
     runs-on: ubuntu-latest
     steps:
+      # deploy/compose.yaml and deploy/Caddyfile are copied to the VPS below.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy
+
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install --yes sshpass
 
-      - name: Pull image and restart service on VPS
+      - name: Update the compose stack on the VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
@@ -85,8 +86,8 @@ jobs:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE: ghcr.io/${{ needs.build.outputs.repo_lc }}:sha-${{ github.sha }}
-          APP_PORT: ${{ env.APP_PORT }}
-          CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+          # Public hostname served by Caddy, e.g. careerbridge.example.com
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -109,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           # Trim whitespace introduced when pasting connection secrets.
-          for name in VPS_HOST VPS_USERNAME; do
+          for name in VPS_HOST VPS_USERNAME APP_DOMAIN; do
             value="${!name}"
             value="${value#"${value%%[![:space:]]*}"}"
             value="${value%"${value##*[![:space:]]}"}"
@@ -118,6 +119,7 @@ jobs:
           : "${VPS_HOST:?Set VPS_HOST in GitHub Actions secrets}"
           : "${VPS_USERNAME:?Set VPS_USERNAME in GitHub Actions secrets}"
           : "${VPS_PASSWORD:?Set VPS_PASSWORD in GitHub Actions secrets}"
+          : "${APP_DOMAIN:?Set APP_DOMAIN in GitHub Actions secrets}"
           if [[ ! "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]]; then
             echo 'VPS_HOST must contain only an IP address or hostname, without a URL scheme, username, port suffix, or whitespace.' >&2
             exit 1
@@ -126,52 +128,91 @@ jobs:
             echo 'VPS_USERNAME contains invalid characters.' >&2
             exit 1
           fi
+          if [[ ! "$APP_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; then
+            echo 'APP_DOMAIN must be a bare hostname such as careerbridge.example.com, without https:// or a path.' >&2
+            exit 1
+          fi
+          COMPOSE_B64=$(base64 -w0 deploy/compose.yaml)
+          CADDYFILE_B64=$(base64 -w0 deploy/Caddyfile)
 
           # Send shell-quoted assignments over SSH stdin, including multiline PEM values.
           {
-            for name in GHCR_USERNAME GHCR_TOKEN IMAGE APP_PORT CONTAINER_NAME SUPABASE_DB_URL SUPABASE_DB_CA_CERT SUPABASE_URL SUPABASE_SECRET_KEY SUPABASE_CV_BUCKET CV_ENCRYPTION_KEY LLM_BASE_URL LLM_API_KEY LLM_MODEL CORS_ORIGINS AUTH_ORIGINS AUTH_COOKIE_SECURE AUTH_SIGNUP_OTP_ENABLED RUST_LOG JOB_SCRAPE_ENABLED JOB_SCRAPE_INTERVAL_SECONDS JOB_SCRAPE_SOURCES OPENWEBNINJA_API_KEY OPENWEBNINJA_QUERIES_PER_RUN; do
+            for name in GHCR_USERNAME GHCR_TOKEN IMAGE APP_DOMAIN COMPOSE_B64 CADDYFILE_B64 SUPABASE_DB_URL SUPABASE_DB_CA_CERT SUPABASE_URL SUPABASE_SECRET_KEY SUPABASE_CV_BUCKET CV_ENCRYPTION_KEY LLM_BASE_URL LLM_API_KEY LLM_MODEL CORS_ORIGINS AUTH_ORIGINS AUTH_COOKIE_SECURE AUTH_SIGNUP_OTP_ENABLED RUST_LOG JOB_SCRAPE_ENABLED JOB_SCRAPE_INTERVAL_SECONDS JOB_SCRAPE_SOURCES OPENWEBNINJA_API_KEY OPENWEBNINJA_QUERIES_PER_RUN; do
               printf 'export %s=%q\n' "$name" "${!name}"
             done
             cat <<'REMOTE'
           set -euo pipefail
 
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-          docker pull "$IMAGE"
-          docker stop "$CONTAINER_NAME" 2>/dev/null || true
-          docker rm "$CONTAINER_NAME" 2>/dev/null || true
+          if ! docker compose version >/dev/null 2>&1; then
+            echo 'The VPS needs the Docker Compose v2 plugin ("docker compose version" failed).' >&2
+            exit 1
+          fi
 
-          docker run -d \
-            --name "$CONTAINER_NAME" \
-            --restart unless-stopped \
-            --read-only \
-            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-            --tmpfs /app/.cache:rw,noexec,nosuid,size=64m \
-            --security-opt no-new-privileges:true \
-            --cap-drop ALL \
-            --pids-limit 256 \
-            --env HOST=0.0.0.0 \
-            --env PORT="$APP_PORT" \
-            --env SUPABASE_DB_URL="$SUPABASE_DB_URL" \
-            --env SUPABASE_DB_CA_CERT="$SUPABASE_DB_CA_CERT" \
-            --env SUPABASE_URL="$SUPABASE_URL" \
-            --env SUPABASE_SECRET_KEY="$SUPABASE_SECRET_KEY" \
-            --env SUPABASE_CV_BUCKET="${SUPABASE_CV_BUCKET:-cv-private}" \
-            --env CV_ENCRYPTION_KEY="$CV_ENCRYPTION_KEY" \
-            --env LLM_BASE_URL="${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}" \
-            --env LLM_API_KEY="$LLM_API_KEY" \
-            --env LLM_MODEL="${LLM_MODEL:-gemini-2.5-flash}" \
-            --env CORS_ORIGINS="$CORS_ORIGINS" \
-            --env AUTH_ORIGINS="$AUTH_ORIGINS" \
-            --env AUTH_COOKIE_SECURE="${AUTH_COOKIE_SECURE:-true}" \
-            --env AUTH_SIGNUP_OTP_ENABLED="${AUTH_SIGNUP_OTP_ENABLED:-true}" \
-            --env RUST_LOG="${RUST_LOG:-info}" \
-            --env JOB_SCRAPE_ENABLED="${JOB_SCRAPE_ENABLED:-false}" \
-            --env JOB_SCRAPE_INTERVAL_SECONDS="${JOB_SCRAPE_INTERVAL_SECONDS:-21600}" \
-            --env JOB_SCRAPE_SOURCES="${JOB_SCRAPE_SOURCES:-grab,cermati,dkatalis,softwareseni,kredivo,openwebninja}" \
-            --env OPENWEBNINJA_API_KEY="${OPENWEBNINJA_API_KEY:-}" \
-            --env OPENWEBNINJA_QUERIES_PER_RUN="${OPENWEBNINJA_QUERIES_PER_RUN:-2}" \
-            -p "$APP_PORT:$APP_PORT" \
-            "$IMAGE"
+          umask 077
+          mkdir -p "$HOME/careerbridge"
+          cd "$HOME/careerbridge"
+          printf '%s' "$COMPOSE_B64" | base64 -d > compose.yaml
+          printf '%s' "$CADDYFILE_B64" | base64 -d > Caddyfile
+          chmod 644 Caddyfile
+
+          : "${SUPABASE_CV_BUCKET:=cv-private}"
+          : "${LLM_BASE_URL:=https://generativelanguage.googleapis.com/v1beta/openai}"
+          : "${LLM_MODEL:=gemini-2.5-flash}"
+          : "${AUTH_COOKIE_SECURE:=true}"
+          : "${AUTH_SIGNUP_OTP_ENABLED:=true}"
+          : "${RUST_LOG:=info}"
+          : "${JOB_SCRAPE_ENABLED:=false}"
+          : "${JOB_SCRAPE_INTERVAL_SECONDS:=21600}"
+          : "${JOB_SCRAPE_SOURCES:=grab,cermati,dkatalis,softwareseni,kredivo,openwebninja}"
+          : "${OPENWEBNINJA_QUERIES_PER_RUN:=2}"
+
+          # Compose reads single-quoted env_file values literally: no $ expansion,
+          # and a multiline PEM stays intact.
+          for name in SUPABASE_DB_URL SUPABASE_DB_CA_CERT SUPABASE_URL SUPABASE_SECRET_KEY SUPABASE_CV_BUCKET CV_ENCRYPTION_KEY LLM_BASE_URL LLM_API_KEY LLM_MODEL CORS_ORIGINS AUTH_ORIGINS AUTH_COOKIE_SECURE AUTH_SIGNUP_OTP_ENABLED RUST_LOG JOB_SCRAPE_ENABLED JOB_SCRAPE_INTERVAL_SECONDS JOB_SCRAPE_SOURCES OPENWEBNINJA_API_KEY OPENWEBNINJA_QUERIES_PER_RUN; do
+            value="${!name}"
+            case "$value" in
+              *\'*)
+                echo "$name contains a single quote, which be.env cannot hold." >&2
+                exit 1
+                ;;
+            esac
+            printf "%s='%s'\n" "$name" "$value"
+          done > be.env.tmp
+          mv be.env.tmp be.env
+
+          # ponytail: no lock on .env; the frontend workflow edits FE_IMAGE in the
+          # same file. Add flock if the two deploys ever overlap in practice.
+          set_env() {
+            { grep -v "^$1=" .env 2>/dev/null || true; printf '%s=%s\n' "$1" "$2"; } > .env.tmp
+            mv .env.tmp .env
+          }
+          set_env BE_IMAGE "$IMAGE"
+          set_env DOMAIN "$APP_DOMAIN"
+
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          docker compose pull be
+          # Retire the pre-compose container and its public port 8080.
+          docker rm -f careerbridge-be 2>/dev/null || true
+          # fe belongs to the frontend workflow; --no-deps leaves it untouched.
+          docker compose up -d --no-deps be caddy
+          # Caddy only rereads a changed Caddyfile when told to.
+          docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 \
+            || docker compose restart caddy
+
+          be_id=$(docker compose ps -q be)
+          healthy=false
+          for attempt in $(seq 1 72); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$be_id")" = healthy ]; then
+              healthy=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$healthy" != true ]; then
+            docker compose logs --tail 80 be >&2
+            echo 'Backend did not become healthy within 6 minutes.' >&2
+            exit 1
+          fi
 
           docker image prune -f
           REMOTE
@@ -180,4 +221,3 @@ jobs:
             -o PreferredAuthentications=password \
             -o PubkeyAuthentication=no \
             "$VPS_USERNAME@$VPS_HOST" 'bash -s'
-

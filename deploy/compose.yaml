@@ -1,0 +1,68 @@
+# CareerBridge on one VPS: Caddy (HTTPS) -> fe (nginx, static + /api proxy) -> be.
+#
+# Lives on the VPS in ~/careerbridge next to three generated files:
+#   .env      BE_IMAGE, FE_IMAGE, DOMAIN   (no secrets)
+#   be.env    backend settings and secrets (mode 0600)
+#   Caddyfile copied from this directory
+# The backend "Publish to VPS" workflow writes compose.yaml, Caddyfile, be.env,
+# BE_IMAGE and DOMAIN. The frontend workflow only sets FE_IMAGE and restarts fe.
+# Only Caddy publishes ports; be and fe are reachable on the compose network only.
+name: careerbridge
+
+services:
+  be:
+    image: ${BE_IMAGE:-ghcr.io/careerbridge-hub/careerbridge-be:latest}
+    restart: unless-stopped
+    env_file: be.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8080"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /app/.cache:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    logging: &logging
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  fe:
+    image: ${FE_IMAGE:-ghcr.io/careerbridge-hub/careerbridge-fe:latest}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      # A real domain gets a Let's Encrypt certificate; localhost gets a local one.
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+volumes:
+  # Certificates and ACME account. Deleting it re-issues certificates.
+  caddy_data:
+  caddy_config:

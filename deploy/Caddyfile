@@ -1,0 +1,8 @@
+# TLS termination for the whole site. Everything goes to the frontend nginx,
+# which serves the static pages and proxies /api/ to the backend.
+{$DOMAIN} {
+	reverse_proxy fe:8080 {
+		# Flush immediately so SSE job events are not buffered.
+		flush_interval -1
+	}
+}

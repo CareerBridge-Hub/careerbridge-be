@@ -108,9 +108,24 @@ jobs:
           OPENWEBNINJA_QUERIES_PER_RUN: ${{ secrets.OPENWEBNINJA_QUERIES_PER_RUN }}
         run: |
           set -euo pipefail
+          # Trim whitespace introduced when pasting connection secrets.
+          for name in VPS_HOST VPS_USERNAME; do
+            value="${!name}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            printf -v "$name" '%s' "$value"
+          done
           : "${VPS_HOST:?Set VPS_HOST in GitHub Actions secrets}"
           : "${VPS_USERNAME:?Set VPS_USERNAME in GitHub Actions secrets}"
           : "${VPS_PASSWORD:?Set VPS_PASSWORD in GitHub Actions secrets}"
+          if [[ ! "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]]; then
+            echo 'VPS_HOST must contain only an IP address or hostname, without a URL scheme, username, port suffix, or whitespace.' >&2
+            exit 1
+          fi
+          if [[ ! "$VPS_USERNAME" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ ]]; then
+            echo 'VPS_USERNAME contains invalid characters.' >&2
+            exit 1
+          fi
 
           # Send shell-quoted assignments over SSH stdin, including multiline PEM values.
           {

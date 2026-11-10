@@ -704,18 +704,19 @@ async fn analysis(
 }
 pub(crate) fn analysis_key(s: &State, revision: i64, catalog_revision: i64) -> String {
     format!(
-        "{revision}:{catalog_revision}:{}:{}:analysis-v7-domicile-trainings",
+        "{revision}:{catalog_revision}:{}:{}:analysis-v8-detailed-guidance",
         s.embedding.version(),
         s.llm.model()
     )
 }
-const EXPLANATION_PROMPT: &str = "You are a career coach for Indonesian job seekers. Return JSON {\"priorityIndices\":[0,1],\"explanation\":\"...\"}.\n\
-priorityIndices: at most 5 indices from missingSkills, required skills first, favouring skills the supplied trainings confirm they cover. Use only supplied indices; [] when missingSkills is empty.\n\
-explanation: Bahasa Indonesia, friendly and direct, address the reader as \"kamu\". Exactly 3 paragraphs separated by a blank line (\\n\\n), 110 to 200 words in total. \
-Paragraph 1: what the score means for this occupation and which owned skills are real strengths; quote score, points.earned and points.total. \
-Paragraph 2: the gap that matters most and why; required skills are worth 2 points and optional skills 1 point; quote points.scoreIfAllRequiredLearned if any required skill is missing. \
-Paragraph 3: one concrete next step. Only say a training teaches a skill if that skill is in its confirmedMissingSkillsCovered; relatedTopics are a hint, not a promise.\n\
-Rules: use only skill names, training names and numbers that appear in the data. Never invent skills, trainings, companies, salaries, durations or percentages. Plain text only: no markdown, lists, headings or emoji.";
+const EXPLANATION_PROMPT: &str = "You are a practical, encouraging career coach for Indonesian job seekers. Return JSON {\"priorityIndices\":[0,1],\"explanation\":\"...\"}.\n\
+priorityIndices: choose at most 5 indices from missingSkills in the order the learner should address them. Put required skills before optional skills; among required skills, favour those confirmed covered by supplied trainings, then use occupation and skill data to choose a sensible order. Use only supplied indices; return [] when missingSkills is empty.\n\
+explanation: write in Bahasa Indonesia, friendly, direct, and address the reader as \"kamu\". Exactly 3 useful paragraphs separated by a blank line (\\n\\n), 130 to 200 words total. Make the advice specific to the supplied occupation and profile; avoid generic career advice. \\
+Paragraph 1: interpret the match score in plain language for this occupation. Mention the strongest owned skills and their categories when useful. Explain skill sources carefully: manual means the user entered it; cv_alias or cv_semantik means the system matched it from the CV, not that proficiency was independently verified. Quote score, points.earned and points.total. Do not overstate what the score means or imply guaranteed employability. \\
+Paragraph 2: explain the most important gap using the actual missing required and optional skill names. Explain that required skills contribute 2 points and optional skills 1 point; quote points.scoreIfAllRequiredLearned when a required skill is missing. State which required skill to prioritize first and why, based only on supplied data. \\
+Paragraph 3: give an actionable learning sequence using the priority skills and recommend one supplied training only when confirmedMissingSkillsCovered includes the skill. If no training confirms coverage, say which skill to practice first without inventing a course. Explain how progress changes the match only using supplied figures.\n\
+Rules: use only skill names, categories, training names and numbers that appear in the data. Never invent requirements, proficiency, evidence, trainings, companies, salaries, durations, job market claims or percentages. relatedTopics are hints, not proof a training teaches a skill. Plain text only: no markdown, lists, headings or emoji.";
+
 pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<Value, AppError> {
     let mut tx = db::active_tx(&s.pool, a.sub).await?;
     let revision: i64 = sqlx::query_scalar("SELECT revision FROM users WHERE id=$1")
@@ -740,6 +741,19 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
             .fetch_all(&mut *tx)
             .await?
             .into_iter()
+            .collect();
+    let profile_skill_sources: std::collections::HashMap<Uuid, String> =
+        sqlx::query("SELECT skill_id,sumber FROM user_skills WHERE user_id=$1")
+            .bind(a.sub)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .map(|row| {
+                (
+                    row.get::<Uuid, _>("skill_id"),
+                    row.get::<String, _>("sumber"),
+                )
+            })
             .collect();
     tx.commit().await?;
     if let Some(result) = cached {
@@ -805,8 +819,8 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
     let mut fallback = true;
     // The LLM receives names and local indices, never user identifiers or database UUIDs.
     let context = json!({
-      "occupation":m.job.nama,"score":m.score,
-      "ownedSkills":skills.iter().filter(|s|profile_skill_ids.contains(&s.id)).map(|s|s.nama.as_str()).collect::<Vec<_>>(),
+      "occupation":m.job.nama,"occupationField":m.job.bidang,"occupationDescription":m.job.deskripsi,"score":m.score,
+      "ownedSkills":skills.iter().filter(|s|profile_skill_ids.contains(&s.id)).map(|s|json!({"name":s.nama,"category":s.kategori,"source":profile_skill_sources.get(&s.id).map(String::as_str).unwrap_or("manual")})).collect::<Vec<_>>(),
       "missingSkills":missing.iter().enumerate().map(|(index,s)|json!({"index":index,"name":s.nama,"required":m.missing_wajib.iter().any(|j|j.skill_id==s.id)})).collect::<Vec<_>>(),
       "trainings":ranked.iter().take(10).map(|r|json!({"name":r.training.nama,"retrievalMethod":page["evidence"][r.training.id.to_string()]["method"],"relatedTopics":page["evidence"][r.training.id.to_string()]["relatedSkillIds"].as_array().into_iter().flatten().filter_map(|id|skills.iter().find(|s|Some(s.id.to_string().as_str())==id.as_str()).map(|s|s.nama.as_str())).collect::<Vec<_>>(),"confirmedMissingSkillsCovered":r.covers_wajib.iter().chain(&r.covers_opsional).filter_map(|id|skills.iter().find(|s|s.id==*id).map(|s|s.nama.as_str())).collect::<Vec<_>>()})).collect::<Vec<_>>()
     });

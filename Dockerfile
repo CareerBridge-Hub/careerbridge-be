@@ -11,7 +11,6 @@ RUN apt-get update \
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
-COPY certs/ ./certs/
 COPY docs/catalog.seed.json ./docs/
 COPY docs/swagger-ui/ ./docs/swagger-ui/
 
@@ -28,10 +27,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # Fetch immutable, hash-verified model assets without application credentials.
 FROM build AS model-assets
-COPY docs/reports/model-artifacts.json /build/docs/reports/model-artifacts.json
+COPY docker/model-artifacts.json /build/docker/model-artifacts.json
 RUN <<'SH'
 set -eu
-manifest=/build/docs/reports/model-artifacts.json
+manifest=/build/docker/model-artifacts.json
 model=$(jq -er '.model' "$manifest")
 revision=$(jq -er '.revision' "$manifest")
 test "$model" = 'intfloat/multilingual-e5-small'

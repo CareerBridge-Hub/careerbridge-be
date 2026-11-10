@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -87,6 +88,7 @@ jobs:
           APP_PORT: ${{ env.APP_PORT }}
           CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_CV_BUCKET: ${{ secrets.SUPABASE_CV_BUCKET }}
@@ -110,12 +112,12 @@ jobs:
           : "${VPS_USERNAME:?Set VPS_USERNAME in GitHub Actions secrets}"
           : "${VPS_PASSWORD:?Set VPS_PASSWORD in GitHub Actions secrets}"
 
-          sshpass -e ssh \
-            -o StrictHostKeyChecking=accept-new \
-            -o PreferredAuthentications=password \
-            -o PubkeyAuthentication=no \
-            "$VPS_USERNAME@$VPS_HOST" \
-            "env GHCR_USERNAME='$GHCR_USERNAME' GHCR_TOKEN='$GHCR_TOKEN' IMAGE='$IMAGE' APP_PORT='$APP_PORT' CONTAINER_NAME='$CONTAINER_NAME' SUPABASE_DB_URL='$SUPABASE_DB_URL' SUPABASE_URL='$SUPABASE_URL' SUPABASE_SECRET_KEY='$SUPABASE_SECRET_KEY' SUPABASE_CV_BUCKET='$SUPABASE_CV_BUCKET' CV_ENCRYPTION_KEY='$CV_ENCRYPTION_KEY' LLM_BASE_URL='$LLM_BASE_URL' LLM_API_KEY='$LLM_API_KEY' LLM_MODEL='$LLM_MODEL' CORS_ORIGINS='$CORS_ORIGINS' AUTH_ORIGINS='$AUTH_ORIGINS' AUTH_COOKIE_SECURE='$AUTH_COOKIE_SECURE' AUTH_SIGNUP_OTP_ENABLED='$AUTH_SIGNUP_OTP_ENABLED' RUST_LOG='$RUST_LOG' JOB_SCRAPE_ENABLED='$JOB_SCRAPE_ENABLED' JOB_SCRAPE_INTERVAL_SECONDS='$JOB_SCRAPE_INTERVAL_SECONDS' JOB_SCRAPE_SOURCES='$JOB_SCRAPE_SOURCES' OPENWEBNINJA_API_KEY='$OPENWEBNINJA_API_KEY' OPENWEBNINJA_QUERIES_PER_RUN='$OPENWEBNINJA_QUERIES_PER_RUN' bash -s" <<'REMOTE'
+          # Send shell-quoted assignments over SSH stdin, including multiline PEM values.
+          {
+            for name in GHCR_USERNAME GHCR_TOKEN IMAGE APP_PORT CONTAINER_NAME SUPABASE_DB_URL SUPABASE_DB_CA_CERT SUPABASE_URL SUPABASE_SECRET_KEY SUPABASE_CV_BUCKET CV_ENCRYPTION_KEY LLM_BASE_URL LLM_API_KEY LLM_MODEL CORS_ORIGINS AUTH_ORIGINS AUTH_COOKIE_SECURE AUTH_SIGNUP_OTP_ENABLED RUST_LOG JOB_SCRAPE_ENABLED JOB_SCRAPE_INTERVAL_SECONDS JOB_SCRAPE_SOURCES OPENWEBNINJA_API_KEY OPENWEBNINJA_QUERIES_PER_RUN; do
+              printf 'export %s=%q\n' "$name" "${!name}"
+            done
+            cat <<'REMOTE'
           set -euo pipefail
 
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
@@ -135,6 +137,7 @@ jobs:
             --env HOST=0.0.0.0 \
             --env PORT="$APP_PORT" \
             --env SUPABASE_DB_URL="$SUPABASE_DB_URL" \
+            --env SUPABASE_DB_CA_CERT="$SUPABASE_DB_CA_CERT" \
             --env SUPABASE_URL="$SUPABASE_URL" \
             --env SUPABASE_SECRET_KEY="$SUPABASE_SECRET_KEY" \
             --env SUPABASE_CV_BUCKET="${SUPABASE_CV_BUCKET:-cv-private}" \
@@ -157,4 +160,9 @@ jobs:
 
           docker image prune -f
           REMOTE
+          } | sshpass -e ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o PreferredAuthentications=password \
+            -o PubkeyAuthentication=no \
+            "$VPS_USERNAME@$VPS_HOST" 'bash -s'
 

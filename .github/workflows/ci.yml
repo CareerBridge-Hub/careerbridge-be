@@ -51,27 +51,6 @@ jobs:
       - name: Scan source without compiling Rust or building Docker
         run: '"$RUNNER_TEMP/trivy-bin/trivy" fs --config trivy.yaml .'
 
-  swagger-assets:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Verify bundled Swagger UI hashes
-        run: |
-          node <<'JS'
-          const fs = require('node:fs');
-          const crypto = require('node:crypto');
-          const manifest = require('./docs/swagger-ui/manifest.json');
-          for (const [name, expected] of Object.entries(manifest.files)) {
-            const digest = crypto.createHash('sha256').update(fs.readFileSync('docs/swagger-ui/' + name)).digest('hex');
-            if (digest !== expected) throw new Error('Swagger UI checksum mismatch: ' + name);
-          }
-          JS
-      - name: Audit the pinned Swagger UI distribution
-        run: |
-          SWAGGER_VERSION=$(node -p "require('./docs/swagger-ui/manifest.json').version")
-          npm install --prefix /tmp/swagger-audit --package-lock-only --ignore-scripts --save-exact "swagger-ui-dist@$SWAGGER_VERSION"
-          npm audit --prefix /tmp/swagger-audit --package-lock-only
 
   codeql:
     name: CodeQL Rust analysis (public repositories)

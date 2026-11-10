@@ -44,33 +44,38 @@ async fn main() -> std::io::Result<()> {
         )
         .init();
     let c = Config::from_env()?;
+    let job_settings = careerbridge_be::infrastructure::jobs::Settings::from_env()?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(std::io::Error::other)?;
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(8)
-        .acquire_timeout(Duration::from_secs(5))
-        .connect(&c.database_url)
-        .await
-        .map_err(|_| std::io::Error::other("database connection failed"))?;
-    let worker_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(2)
-        .connect(&c.worker_database_url)
-        .await
-        .map_err(|_| std::io::Error::other("worker database connection failed"))?;
-    careerbridge_be::infrastructure::db::validate_runtime_role(&pool, "careerbridge_api")
-        .await
-        .map_err(std::io::Error::other)?;
-    careerbridge_be::infrastructure::db::validate_runtime_role(&worker_pool, "careerbridge_worker")
-        .await
-        .map_err(std::io::Error::other)?;
+    let pool = careerbridge_be::infrastructure::db::connect_runtime_pool(
+        &c.database_url,
+        careerbridge_be::infrastructure::db::RuntimeRole::Api,
+    )
+    .await
+    .map_err(|_| {
+        std::io::Error::other(
+            "API database role initialization failed; run migrations with SUPABASE_DB_URL first",
+        )
+    })?;
+    let worker_pool = careerbridge_be::infrastructure::db::connect_runtime_pool(
+        &c.database_url,
+        careerbridge_be::infrastructure::db::RuntimeRole::Worker,
+    )
+    .await
+    .map_err(|_| {
+        std::io::Error::other(
+            "Worker database role initialization failed; run migrations with SUPABASE_DB_URL first",
+        )
+    })?;
     let embedding = LocalEmbedding::load(c.model_cache)
         .await
         .map_err(std::io::Error::other)?;
     let state = Arc::new(State {
+        events: Default::default(),
         pdf: Arc::new(careerbridge_be::infrastructure::pdf::SubprocessPdf {
             executable: std::env::current_exe()?,
         }),
@@ -92,17 +97,38 @@ async fn main() -> std::io::Result<()> {
             model: c.llm_model,
         }),
     });
-    tokio::spawn(worker::run(state.clone()));
-    HttpServer::new(move || {
+    let cookie_auth = web::Data::new(
+        careerbridge_be::presentation::session::CookieAuth::new(
+            c.cookie_secure,
+            c.auth_origins.clone(),
+        )
+        .with_signup_otp(c.signup_otp_enabled),
+    );
+    let app_state = state.clone();
+    let server = HttpServer::new(move || {
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "PATCH", "DELETE"])
-            .allowed_headers(vec![header::AUTHORIZATION, header::CONTENT_TYPE])
+            .allowed_headers(vec![
+                header::CONTENT_TYPE,
+                header::HeaderName::from_static("x-csrf-protection"),
+                header::HeaderName::from_static("last-event-id"),
+            ])
+            .supports_credentials()
             .max_age(600);
         for origin in &c.cors_origins {
             cors = cors.allowed_origin(origin)
         }
+        let mut headers = DefaultHeaders::new()
+            .add(("X-Content-Type-Options", "nosniff"))
+            .add(("Cache-Control", "no-store"))
+            .add(("Referrer-Policy", "no-referrer"))
+            .add(("X-Frame-Options", "DENY"));
+        if c.cookie_secure {
+            headers = headers.add(("Strict-Transport-Security", "max-age=31536000"));
+        }
         App::new()
-            .app_data(web::Data::from(state.clone()))
+            .app_data(web::Data::from(app_state.clone()))
+            .app_data(cookie_auth.clone())
             .app_data(
                 web::JsonConfig::default()
                     .limit(64 * 1024)
@@ -115,15 +141,19 @@ async fn main() -> std::io::Result<()> {
             )
             .app_data(actix_multipart::form::MultipartFormConfig::default().total_limit(2100000))
             .wrap(cors)
-            .wrap(
-                DefaultHeaders::new()
-                    .add(("X-Content-Type-Options", "nosniff"))
-                    .add(("Cache-Control", "no-store")),
-            )
+            .wrap(headers)
             .configure(http::configure)
     })
     .workers(2)
-    .bind((c.host.as_str(), c.port))?
-    .run()
-    .await
+    .bind((c.host.as_str(), c.port))?;
+
+    // Bind before starting background work. A duplicate server process must not
+    // launch another importer or worker and mutate shared database state.
+    careerbridge_be::infrastructure::jobs::start(&c.database_url, job_settings)
+        .await
+        .map_err(std::io::Error::other)?;
+    careerbridge_be::presentation::events::start_background(state.clone());
+    tokio::spawn(worker::run(state));
+
+    server.run().await
 }

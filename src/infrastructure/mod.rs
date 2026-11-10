@@ -1,10 +1,14 @@
+pub mod admin;
 pub mod auth;
+pub mod browsing;
 pub mod config;
 pub mod crypto;
 pub mod db;
 pub mod embedding;
 pub mod error;
+pub mod jobs;
 pub mod llm;
 pub mod pdf;
 pub mod storage;
+pub mod training_search;
 pub mod worker;

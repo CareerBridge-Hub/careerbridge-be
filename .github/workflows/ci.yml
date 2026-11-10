@@ -1,0 +1,74 @@
+name: Backend security
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      codeql:
+        description: Run additional CodeQL analysis (public repositories only)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  code-security:
+    name: Rust source security checks (free, public or private)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install pinned Semgrep Community Edition
+        run: |
+          python3 -m venv /tmp/semgrep-env
+          /tmp/semgrep-env/bin/pip install --disable-pip-version-check semgrep==1.183.0
+      - name: Test security rules against unsafe and safe fixtures
+        run: /tmp/semgrep-env/bin/semgrep scan --test --metrics=off --disable-version-check tests/security
+      - name: Scan production Rust code (findings fail CI)
+        run: /tmp/semgrep-env/bin/semgrep scan --config tests/security/semgrep.yml --metrics=off --disable-version-check --error --strict src
+
+  trivy:
+    name: Trivy dependency, configuration and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install checksum-pinned Trivy 0.76.1
+        env:
+          TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+        run: |
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 --connect-timeout 20 --max-time 180 \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz \
+            --output "$RUNNER_TEMP/trivy.tar.gz"
+          printf '%s  %s\n' "$TRIVY_SHA256" "$RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/trivy-bin" trivy
+      - name: Scan source without compiling Rust or building Docker
+        run: '"$RUNNER_TEMP/trivy-bin/trivy" fs --config trivy.yaml .'
+
+
+  codeql:
+    name: CodeQL Rust analysis (public repositories)
+    # GitHub Free does not include CodeQL for private repositories.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.codeql && github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Initialize CodeQL Rust without rebuilding the backend
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: rust
+          build-mode: none
+          queries: security-extended
+      - name: Analyze and publish code scanning alerts
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4

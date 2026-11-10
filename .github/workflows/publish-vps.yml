@@ -1,0 +1,161 @@
+name: Publish to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-vps-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONTAINER_NAME: careerbridge-be
+  APP_PORT: 8080
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: rustup update stable --no-self-update
+
+      - name: Cache Cargo downloads and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run database migrations
+        run: cargo run --locked --bin migrate --release
+
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      repo_lc: ${{ steps.repo-lc.outputs.repo }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase repository name
+        id: repo-lc
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: runtime
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo-lc.outputs.repo }}:sha-${{ github.sha }}
+            ghcr.io/${{ steps.repo-lc.outputs.repo }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build, migrate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install --yes sshpass
+
+      - name: Pull image and restart service on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ghcr.io/${{ needs.build.outputs.repo_lc }}:sha-${{ github.sha }}
+          APP_PORT: ${{ env.APP_PORT }}
+          CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SUPABASE_CV_BUCKET: ${{ secrets.SUPABASE_CV_BUCKET }}
+          CV_ENCRYPTION_KEY: ${{ secrets.CV_ENCRYPTION_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          AUTH_ORIGINS: ${{ secrets.AUTH_ORIGINS }}
+          AUTH_COOKIE_SECURE: ${{ secrets.AUTH_COOKIE_SECURE }}
+          AUTH_SIGNUP_OTP_ENABLED: ${{ secrets.AUTH_SIGNUP_OTP_ENABLED }}
+          RUST_LOG: ${{ secrets.RUST_LOG }}
+          JOB_SCRAPE_ENABLED: ${{ secrets.JOB_SCRAPE_ENABLED }}
+          JOB_SCRAPE_INTERVAL_SECONDS: ${{ secrets.JOB_SCRAPE_INTERVAL_SECONDS }}
+          JOB_SCRAPE_SOURCES: ${{ secrets.JOB_SCRAPE_SOURCES }}
+          OPENWEBNINJA_API_KEY: ${{ secrets.OPENWEBNINJA_API_KEY }}
+          OPENWEBNINJA_QUERIES_PER_RUN: ${{ secrets.OPENWEBNINJA_QUERIES_PER_RUN }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Set VPS_HOST in GitHub Actions secrets}"
+          : "${VPS_USERNAME:?Set VPS_USERNAME in GitHub Actions secrets}"
+          : "${VPS_PASSWORD:?Set VPS_PASSWORD in GitHub Actions secrets}"
+
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o PreferredAuthentications=password \
+            -o PubkeyAuthentication=no \
+            "$VPS_USERNAME@$VPS_HOST" \
+            "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          docker pull "$IMAGE"
+          docker stop "$CONTAINER_NAME" 2>/dev/null || true
+          docker rm "$CONTAINER_NAME" 2>/dev/null || true
+
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /app/.cache:rw,noexec,nosuid,size=64m \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL \
+            --pids-limit 256 \
+            --env HOST=0.0.0.0 \
+            --env PORT="$APP_PORT" \
+            --env SUPABASE_DB_URL="$SUPABASE_DB_URL" \
+            --env SUPABASE_URL="$SUPABASE_URL" \
+            --env SUPABASE_SECRET_KEY="$SUPABASE_SECRET_KEY" \
+            --env SUPABASE_CV_BUCKET="${SUPABASE_CV_BUCKET:-cv-private}" \
+            --env CV_ENCRYPTION_KEY="$CV_ENCRYPTION_KEY" \
+            --env LLM_BASE_URL="${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}" \
+            --env LLM_API_KEY="$LLM_API_KEY" \
+            --env LLM_MODEL="${LLM_MODEL:-gemini-2.5-flash}" \
+            --env CORS_ORIGINS="$CORS_ORIGINS" \
+            --env AUTH_ORIGINS="$AUTH_ORIGINS" \
+            --env AUTH_COOKIE_SECURE="${AUTH_COOKIE_SECURE:-true}" \
+            --env AUTH_SIGNUP_OTP_ENABLED="${AUTH_SIGNUP_OTP_ENABLED:-true}" \
+            --env RUST_LOG="${RUST_LOG:-info}" \
+            --env JOB_SCRAPE_ENABLED="${JOB_SCRAPE_ENABLED:-false}" \
+            --env JOB_SCRAPE_INTERVAL_SECONDS="${JOB_SCRAPE_INTERVAL_SECONDS:-21600}" \
+            --env JOB_SCRAPE_SOURCES="${JOB_SCRAPE_SOURCES:-grab,cermati,dkatalis,softwareseni,kredivo,openwebninja}" \
+            --env OPENWEBNINJA_API_KEY="${OPENWEBNINJA_API_KEY:-}" \
+            --env OPENWEBNINJA_QUERIES_PER_RUN="${OPENWEBNINJA_QUERIES_PER_RUN:-2}" \
+            -p "$APP_PORT:$APP_PORT" \
+            "$IMAGE"
+
+          docker image prune -f
+          REMOTE
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+

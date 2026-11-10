@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect();
         scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         let exact = index.get(&normalize(term)).copied();
-        let accepted = exact.or_else(|| (scores[0].1 >= 0.8).then_some(scores[0].0));
+        let accepted = exact.or_else(|| (scores[0].1 >= 0.88).then_some(scores[0].0));
         if accepted == Some(expected) {
             correct += 1;
         }

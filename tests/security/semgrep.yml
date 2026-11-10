@@ -1,0 +1,45 @@
+rules:
+  - id: rust-disable-tls-verification
+    languages: [rust]
+    severity: ERROR
+    message: Keep TLS certificate and hostname verification enabled.
+    pattern-either:
+      - pattern: $CLIENT.danger_accept_invalid_certs(true)
+      - pattern: $CLIENT.danger_accept_invalid_hostnames(true)
+  - id: rust-disable-jwt-signature-verification
+    languages: [rust]
+    severity: ERROR
+    message: Never disable JWT signature verification in backend authentication.
+    pattern: $VALIDATION.insecure_disable_signature_validation()
+  - id: rust-disable-jwt-expiry-validation
+    languages: [rust]
+    severity: ERROR
+    message: Reject expired JWTs; keep expiration validation enabled.
+    pattern: $VALIDATION.validate_exp = false
+  - id: rust-permissive-cors
+    languages: [rust]
+    severity: ERROR
+    message: Use configured exact frontend origins instead of permissive CORS.
+    pattern-either:
+      - pattern: actix_cors::Cors::permissive()
+      - pattern: Cors::permissive()
+  - id: rust-formatted-sql-query
+    languages: [rust]
+    severity: ERROR
+    message: Bind SQL values. Dynamic SQL identifiers require explicit allowlist review.
+    pattern-either:
+      - pattern: sqlx::query(format!($FMT, ...))
+      - pattern: sqlx::query_scalar(format!($FMT, ...))
+      - pattern: sqlx::query_as(format!($FMT, ...))
+  - id: rust-shell-command-string
+    languages: [rust]
+    severity: ERROR
+    message: Pass executable arguments directly instead of executing shell command strings.
+    patterns:
+      - pattern-either:
+          - pattern: Command::new($SHELL).arg("-c").arg($CODE)
+          - pattern: std::process::Command::new($SHELL).arg("-c").arg($CODE)
+          - pattern: tokio::process::Command::new($SHELL).arg("-c").arg($CODE)
+      - metavariable-regex:
+          metavariable: $SHELL
+          regex: '^"(/bin/)?(sh|bash|zsh|dash)"$'

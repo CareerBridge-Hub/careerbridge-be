@@ -3,12 +3,10 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_call:
   workflow_dispatch:
-    inputs:
-      codeql:
-        description: Run additional CodeQL analysis (public repositories only)
-        type: boolean
-        default: false
 permissions:
   contents: read
 concurrency:
@@ -21,6 +19,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
       - name: Install pinned Semgrep Community Edition
         run: |
           python3 -m venv /tmp/semgrep-env
@@ -51,24 +51,72 @@ jobs:
       - name: Scan source without compiling Rust or building Docker
         run: '"$RUNNER_TEMP/trivy-bin/trivy" fs --config trivy.yaml .'
 
-
-  codeql:
-    name: CodeQL Rust analysis (public repositories)
-    # GitHub Free does not include CodeQL for private repositories.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.codeql && github.event.repository.private == false }}
+  rust-security-tests:
+    name: JWT, CSRF, crypto and database authorization regression tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-disposable-only
+          POSTGRES_DB: careerbridge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d careerbridge_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      SUPABASE_DB_URL: postgresql://postgres:ci-disposable-only@127.0.0.1:5432/careerbridge_test
+      TEST_DATABASE_URL: postgresql://postgres:ci-disposable-only@127.0.0.1:5432/careerbridge_test
+      CARGO_BUILD_JOBS: 2
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Initialize CodeQL Rust without rebuilding the backend
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
-          languages: rust
-          build-mode: none
-          queries: security-extended
-      - name: Analyze and publish code scanning alerts
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+          persist-credentials: false
+      - name: Install native build prerequisites and PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes cmake pkg-config postgresql-client
+      - name: Install Rust toolchain
+        run: rustup update stable --no-self-update
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Unit and credential-free integration tests
+        run: cargo test --locked
+      - name: Bootstrap disposable database and apply migrations
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/bootstrap.sql
+          cargo run --locked --bin migrate
+      - name: Verify cross-user isolation and restricted database roles
+        run: |
+          cargo test --locked --test core_integration core_flow_is_isolated_recoverable_and_cache_aware -- --ignored --exact
+          cargo test --locked --test core_integration backend_http_journey -- --ignored --exact
+          cargo test --locked --test core_integration single_url_runtime_connections_enforce_roles_and_rls -- --ignored --exact
+          cargo test --locked --test core_integration admin_http_routes_require_database_role -- --ignored --exact
+          cargo test --locked --test admin_integration -- --ignored --test-threads=1
+          cargo test --locked --test vacancy_match_integration -- --ignored --test-threads=1
+
+  rustsec:
+    name: RustSec advisories in enabled dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain and pinned cargo-audit
+        run: |
+          rustup update stable --no-self-update
+          cargo install cargo-audit --version 0.22.2 --locked
+      - name: Reject SQLite activation before applying lockfile-only exception
+        run: |
+          # SQLx records optional SQLite in Cargo.lock, but this is PostgreSQL-only.
+          # Fail closed if any target starts using it; never waive a runtime finding.
+          cargo tree --locked --target all --invert libsqlite3-sys --prefix none > "$RUNNER_TEMP/sqlite-tree"
+          if [ -s "$RUNNER_TEMP/sqlite-tree" ]; then
+            cat "$RUNNER_TEMP/sqlite-tree"
+            echo 'SQLite is enabled: remove the audit exception and upgrade its dependency.' >&2
+            exit 1
+          fi
+      - name: Audit against the current RustSec database
+        run: cargo audit --ignore RUSTSEC-2026-0459

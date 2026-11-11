@@ -14,4 +14,3 @@ scan:
     - target
     - .cache
     - .venv
-    - scripts

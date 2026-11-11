@@ -14,46 +14,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  security:
+    name: Required backend security checks
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   migrate:
+    needs: security
     runs-on: ubuntu-latest
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_DB_CA_CERT: ${{ secrets.SUPABASE_DB_CA_CERT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Rust toolchain
         run: rustup update stable --no-self-update
 
       - name: Cache Cargo downloads and build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
       - name: Run database migrations
         run: cargo run --locked --bin migrate --release
 
   build:
+    needs: security
     runs-on: ubuntu-latest
     outputs:
       repo_lc: ${{ steps.repo-lc.outputs.repo }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
 
       - name: Lowercase repository name
         id: repo-lc
         run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and publish image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile
@@ -70,8 +82,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # deploy/compose.yaml and deploy/Caddyfile are copied to the VPS below.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
+          persist-credentials: false
           sparse-checkout: deploy
 
       - name: Install sshpass
@@ -189,6 +202,9 @@ jobs:
           set_env BE_IMAGE "$IMAGE"
           set_env DOMAIN "$APP_DOMAIN"
 
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d)
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           docker compose pull be
           # Retire the pre-compose container and its public port 8080.

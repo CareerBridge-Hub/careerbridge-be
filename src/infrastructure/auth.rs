@@ -77,6 +77,8 @@ impl Auth {
         let mut validation = Validation::new(h.alg);
         validation.set_audience(&["authenticated"]);
         validation.set_issuer(&[&self.issuer]);
+        validation.set_required_spec_claims(&["exp", "sub", "iss", "aud"]);
+        validation.validate_nbf = true;
         validation.leeway = 10;
         let claims = decode::<Claims>(token, &key, &validation)
             .map_err(|_| AppError::Unauthorized)?
@@ -138,5 +140,64 @@ mod tests {
         ] {
             assert!(matches!(a.verify(token).await, Err(AppError::Unauthorized)));
         }
+    }
+
+    #[tokio::test]
+    async fn signed_tokens_require_identity_claims_and_valid_times() {
+        use jsonwebtoken::{EncodingKey, Header, encode, get_current_timestamp};
+        use serde_json::json;
+        let auth = Auth::new("https://example.invalid", reqwest::Client::new());
+        let keys = serde_json::from_str(include_str!("../../tests/fixtures/jwks.json")).unwrap();
+        *auth.cache.write().await = Some((Instant::now(), keys));
+        let key = EncodingKey::from_ec_der(include_bytes!("../../tests/fixtures/test-jwt.der"));
+        let jwks: JwkSet =
+            serde_json::from_str(include_str!("../../tests/fixtures/jwks.json")).unwrap();
+        let mut header = Header::new(Algorithm::ES256);
+        header.kid = jwks.keys[0].common.key_id.clone();
+        let now = get_current_timestamp();
+        let valid = json!({"sub":Uuid::new_v4(),"iss":"https://example.invalid/auth/v1","aud":"authenticated","exp":now+300});
+        let sign = |claims: &serde_json::Value| encode(&header, claims, &key).unwrap();
+        assert!(auth.verify(&sign(&valid)).await.is_ok());
+        for missing in ["exp", "sub", "iss", "aud"] {
+            let mut claims = valid.clone();
+            claims.as_object_mut().unwrap().remove(missing);
+            assert!(
+                matches!(
+                    auth.verify(&sign(&claims)).await,
+                    Err(AppError::Unauthorized)
+                ),
+                "missing {missing}"
+            );
+        }
+        for (field, value) in [
+            ("iss", json!("https://evil.invalid/auth/v1")),
+            ("aud", json!("anon")),
+            ("exp", json!(now - 60)),
+            ("nbf", json!(now + 300)),
+        ] {
+            let mut claims = valid.clone();
+            claims[field] = value;
+            assert!(
+                matches!(
+                    auth.verify(&sign(&claims)).await,
+                    Err(AppError::Unauthorized)
+                ),
+                "invalid {field}"
+            );
+        }
+        let mut forged = sign(&valid);
+        let index = forged.rfind('.').unwrap() + 1;
+        forged.replace_range(
+            index..index + 1,
+            if &forged[index..index + 1] == "A" {
+                "B"
+            } else {
+                "A"
+            },
+        );
+        assert!(matches!(
+            auth.verify(&forged).await,
+            Err(AppError::Unauthorized)
+        ));
     }
 }

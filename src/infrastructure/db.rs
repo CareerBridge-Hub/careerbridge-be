@@ -13,6 +13,7 @@ pub enum RuntimeRole {
     Api,
     Worker,
     Importer,
+    CatalogImporter,
 }
 impl RuntimeRole {
     fn name(self) -> &'static str {
@@ -20,6 +21,7 @@ impl RuntimeRole {
             Self::Api => "careerbridge_api",
             Self::Worker => "careerbridge_worker",
             Self::Importer => "careerbridge_importer",
+            Self::CatalogImporter => "careerbridge_catalog_importer",
         }
     }
     fn setup(self) -> &'static str {
@@ -27,6 +29,7 @@ impl RuntimeRole {
             Self::Api => "SET ROLE careerbridge_api",
             Self::Worker => "SET ROLE careerbridge_worker",
             Self::Importer => "SET ROLE careerbridge_importer",
+            Self::CatalogImporter => "SET ROLE careerbridge_catalog_importer",
         }
     }
 }
@@ -38,7 +41,7 @@ pub async fn connect_runtime_pool(url: &str, role: RuntimeRole) -> Result<PgPool
         AppError::Invalid("Invalid SUPABASE_DB_URL or unsupported transaction pooling.")
     })?;
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(match role { RuntimeRole::Api => 8, RuntimeRole::Worker | RuntimeRole::Importer => 2 })
+        .max_connections(match role { RuntimeRole::Api => 8, RuntimeRole::Worker | RuntimeRole::Importer | RuntimeRole::CatalogImporter => 2 })
         .acquire_timeout(std::time::Duration::from_secs(5))
         .after_connect(move |connection, _| Box::pin(async move {
             sqlx::query(role.setup()).execute(&mut *connection).await?;

@@ -23,6 +23,18 @@ rules:
     pattern-either:
       - pattern: actix_cors::Cors::permissive()
       - pattern: Cors::permissive()
+      - pattern: $CORS.allow_any_origin()
+      - pattern: $CORS.send_wildcard()
+  - id: rust-disable-jwt-audience-validation
+    languages: [rust]
+    severity: ERROR
+    message: Keep JWT audience validation enabled.
+    pattern: $VALIDATION.validate_aud = false
+  - id: rust-disable-jwt-not-before-validation
+    languages: [rust]
+    severity: ERROR
+    message: Reject tokens before their not-before timestamp.
+    pattern: $VALIDATION.validate_nbf = false
   - id: rust-formatted-sql-query
     languages: [rust]
     severity: ERROR

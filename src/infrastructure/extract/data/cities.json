@@ -1,0 +1,1374 @@
+{
+"aceh barat": {
+"name": "Aceh Barat",
+"province_id": 1
+},
+"aceh besar": {
+"name": "Aceh Besar",
+"province_id": 1
+},
+"aceh jaya": {
+"name": "Aceh Jaya",
+"province_id": 1
+},
+"aceh selatan": {
+"name": "Aceh Selatan",
+"province_id": 1
+},
+"aceh tengah": {
+"name": "Aceh Tengah",
+"province_id": 1
+},
+"aceh tenggara": {
+"name": "Aceh Tenggara",
+"province_id": 1
+},
+"aceh timur": {
+"name": "Aceh Timur",
+"province_id": 1
+},
+"adm. kep. seribu": {
+"name": "Adm. Kep. Seribu",
+"province_id": 11
+},
+"agam": {
+"name": "Agam",
+"province_id": 3
+},
+"ambon": {
+"name": "Ambon",
+"province_id": 31
+},
+"asahan": {
+"name": "Asahan",
+"province_id": 2
+},
+"badung": {
+"name": "Badung",
+"province_id": 17
+},
+"balangan": {
+"name": "Balangan",
+"province_id": 22
+},
+"balikpapan": {
+"name": "Balikpapan",
+"province_id": 23
+},
+"banda aceh": {
+"name": "Banda Aceh",
+"province_id": 1
+},
+"bandar lampung": {
+"name": "Bandar Lampung",
+"province_id": 10
+},
+"bandung": {
+"name": "Bandung",
+"province_id": 12
+},
+"bandung barat": {
+"name": "Bandung Barat",
+"province_id": 12
+},
+"banggai": {
+"name": "Banggai",
+"province_id": 27
+},
+"banggai kepulauan": {
+"name": "Banggai Kepulauan",
+"province_id": 27
+},
+"bangka barat": {
+"name": "Bangka Barat",
+"province_id": 8
+},
+"bangka selatan": {
+"name": "Bangka Selatan",
+"province_id": 8
+},
+"bangka tengah": {
+"name": "Bangka Tengah",
+"province_id": 8
+},
+"bangkalan": {
+"name": "Bangkalan",
+"province_id": 16
+},
+"bangli": {
+"name": "Bangli",
+"province_id": 17
+},
+"banjarbaru": {
+"name": "Banjarbaru",
+"province_id": 22
+},
+"banjarmasin": {
+"name": "Banjarmasin",
+"province_id": 22
+},
+"banjarnegara": {
+"name": "Banjarnegara",
+"province_id": 14
+},
+"bantaeng": {
+"name": "Bantaeng",
+"province_id": 29
+},
+"bantul": {
+"name": "Bantul",
+"province_id": 15
+},
+"banyuasin": {
+"name": "Banyuasin",
+"province_id": 7
+},
+"banyumas": {
+"name": "Banyumas",
+"province_id": 14
+},
+"banyuwangi": {
+"name": "Banyuwangi",
+"province_id": 16
+},
+"barito kuala": {
+"name": "Barito Kuala",
+"province_id": 22
+},
+"barito selatan": {
+"name": "Barito Selatan",
+"province_id": 21
+},
+"barito utara": {
+"name": "Barito Utara",
+"province_id": 21
+},
+"barru": {
+"name": "Barru",
+"province_id": 29
+},
+"batam": {
+"name": "Batam",
+"province_id": 5
+},
+"batang": {
+"name": "Batang",
+"province_id": 14
+},
+"batu": {
+"name": "Batu",
+"province_id": 16
+},
+"batu bara": {
+"name": "Batu Bara",
+"province_id": 2
+},
+"bekasi": {
+"name": "Bekasi",
+"province_id": 12
+},
+"belitung": {
+"name": "Belitung",
+"province_id": 8
+},
+"bener meriah": {
+"name": "Bener Meriah",
+"province_id": 1
+},
+"bengkalis": {
+"name": "Bengkalis",
+"province_id": 4
+},
+"bengkulu": {
+"name": "Bengkulu",
+"province_id": 9
+},
+"bengkulu selatan": {
+"name": "Bengkulu Selatan",
+"province_id": 9
+},
+"bengkulu utara": {
+"name": "Bengkulu Utara",
+"province_id": 9
+},
+"berau": {
+"name": "Berau",
+"province_id": 23
+},
+"biak numfor": {
+"name": "Biak Numfor",
+"province_id": 33
+},
+"bima": {
+"name": "Bima",
+"province_id": 18
+},
+"binjai": {
+"name": "Binjai",
+"province_id": 2
+},
+"bireuen": {
+"name": "Bireuen",
+"province_id": 1
+},
+"bitung": {
+"name": "Bitung",
+"province_id": 25
+},
+"blitar": {
+"name": "Blitar",
+"province_id": 16
+},
+"blora": {
+"name": "Blora",
+"province_id": 14
+},
+"bogor": {
+"name": "Bogor",
+"province_id": 12
+},
+"bojonegoro": {
+"name": "Bojonegoro",
+"province_id": 16
+},
+"bolaang mongondow": {
+"name": "Bolaang Mongondow",
+"province_id": 25
+},
+"bondowoso": {
+"name": "Bondowoso",
+"province_id": 16
+},
+"bone": {
+"name": "Bone",
+"province_id": 29
+},
+"bone bolango": {
+"name": "Bone Bolango",
+"province_id": 26
+},
+"bontang": {
+"name": "Bontang",
+"province_id": 23
+},
+"boyolali": {
+"name": "Boyolali",
+"province_id": 14
+},
+"brebes": {
+"name": "Brebes",
+"province_id": 14
+},
+"bukittinggi": {
+"name": "Bukittinggi",
+"province_id": 3
+},
+"buleleng": {
+"name": "Buleleng",
+"province_id": 17
+},
+"bulukumba": {
+"name": "Bulukumba",
+"province_id": 29
+},
+"bulungan": {
+"name": "Bulungan",
+"province_id": 24
+},
+"bungo": {
+"name": "Bungo",
+"province_id": 6
+},
+"buol": {
+"name": "Buol",
+"province_id": 27
+},
+"buru": {
+"name": "Buru",
+"province_id": 31
+},
+"buton": {
+"name": "Buton",
+"province_id": 30
+},
+"buton tengah": {
+"name": "Buton Tengah",
+"province_id": 30
+},
+"buton utara": {
+"name": "Buton Utara",
+"province_id": 30
+},
+"ciamis": {
+"name": "Ciamis",
+"province_id": 12
+},
+"cianjur": {
+"name": "Cianjur",
+"province_id": 12
+},
+"cilacap": {
+"name": "Cilacap",
+"province_id": 14
+},
+"cilegon": {
+"name": "Cilegon",
+"province_id": 13
+},
+"cimahi": {
+"name": "Cimahi",
+"province_id": 12
+},
+"cirebon": {
+"name": "Cirebon",
+"province_id": 12
+},
+"deli serdang": {
+"name": "Deli Serdang",
+"province_id": 2
+},
+"demak": {
+"name": "Demak",
+"province_id": 14
+},
+"denpasar": {
+"name": "Denpasar",
+"province_id": 17
+},
+"depok": {
+"name": "Depok",
+"province_id": 12
+},
+"dharmasraya": {
+"name": "Dharmasraya",
+"province_id": 3
+},
+"dompu": {
+"name": "Dompu",
+"province_id": 18
+},
+"donggala": {
+"name": "Donggala",
+"province_id": 27
+},
+"dumai": {
+"name": "Dumai",
+"province_id": 4
+},
+"empat lawang": {
+"name": "Empat Lawang",
+"province_id": 7
+},
+"ende": {
+"name": "Ende",
+"province_id": 19
+},
+"enrekang": {
+"name": "Enrekang",
+"province_id": 29
+},
+"fak fak": {
+"name": "Fak Fak",
+"province_id": 34
+},
+"flores timur": {
+"name": "Flores Timur",
+"province_id": 19
+},
+"garut": {
+"name": "Garut",
+"province_id": 12
+},
+"gianyar": {
+"name": "Gianyar",
+"province_id": 17
+},
+"gorontalo": {
+"name": "Gorontalo",
+"province_id": 26
+},
+"gowa": {
+"name": "Gowa",
+"province_id": 29
+},
+"gresik": {
+"name": "Gresik",
+"province_id": 16
+},
+"grobogan": {
+"name": "Grobogan",
+"province_id": 14
+},
+"gunungkidul": {
+"name": "Gunungkidul",
+"province_id": 15
+},
+"gunungsitoli": {
+"name": "Gunungsitoli",
+"province_id": 2
+},
+"halmahera barat": {
+"name": "Halmahera Barat",
+"province_id": 32
+},
+"halmahera utara": {
+"name": "Halmahera Utara",
+"province_id": 32
+},
+"hulu sungai utara": {
+"name": "Hulu Sungai Utara",
+"province_id": 22
+},
+"humbang hasundutan": {
+"name": "Humbang Hasundutan",
+"province_id": 2
+},
+"indragiri hilir": {
+"name": "Indragiri Hilir",
+"province_id": 4
+},
+"indramayu": {
+"name": "Indramayu",
+"province_id": 12
+},
+"jakarta barat": {
+"name": "Jakarta Barat",
+"province_id": 11
+},
+"jakarta pusat": {
+"name": "Jakarta Pusat",
+"province_id": 11
+},
+"jakarta selatan": {
+"name": "Jakarta Selatan",
+"province_id": 11
+},
+"jakarta timur": {
+"name": "Jakarta Timur",
+"province_id": 11
+},
+"jakarta utara": {
+"name": "Jakarta Utara",
+"province_id": 11
+},
+"jambi": {
+"name": "Jambi",
+"province_id": 6
+},
+"jayapura": {
+"name": "Jayapura",
+"province_id": 33
+},
+"jember": {
+"name": "Jember",
+"province_id": 16
+},
+"jembrana": {
+"name": "Jembrana",
+"province_id": 17
+},
+"jeneponto": {
+"name": "Jeneponto",
+"province_id": 29
+},
+"jepara": {
+"name": "Jepara",
+"province_id": 14
+},
+"jombang": {
+"name": "Jombang",
+"province_id": 16
+},
+"kampar": {
+"name": "Kampar",
+"province_id": 4
+},
+"kapuas": {
+"name": "Kapuas",
+"province_id": 21
+},
+"karanganyar": {
+"name": "Karanganyar",
+"province_id": 14
+},
+"karangasem": {
+"name": "Karangasem",
+"province_id": 17
+},
+"karawang": {
+"name": "Karawang",
+"province_id": 12
+},
+"karimun": {
+"name": "Karimun",
+"province_id": 5
+},
+"karo": {
+"name": "Karo",
+"province_id": 2
+},
+"katingan": {
+"name": "Katingan",
+"province_id": 21
+},
+"kaur": {
+"name": "Kaur",
+"province_id": 9
+},
+"kebumen": {
+"name": "Kebumen",
+"province_id": 14
+},
+"kediri": {
+"name": "Kediri",
+"province_id": 16
+},
+"kendal": {
+"name": "Kendal",
+"province_id": 14
+},
+"kendari": {
+"name": "Kendari",
+"province_id": 30
+},
+"kepahiang": {
+"name": "Kepahiang",
+"province_id": 9
+},
+"kepulauan mentawai": {
+"name": "Kepulauan Mentawai",
+"province_id": 3
+},
+"kepulauan selayar": {
+"name": "Kepulauan Selayar",
+"province_id": 29
+},
+"kerinci": {
+"name": "Kerinci",
+"province_id": 6
+},
+"ketapang": {
+"name": "Ketapang",
+"province_id": 20
+},
+"klaten": {
+"name": "Klaten",
+"province_id": 14
+},
+"klungkung": {
+"name": "Klungkung",
+"province_id": 17
+},
+"kolaka": {
+"name": "Kolaka",
+"province_id": 30
+},
+"kolaka utara": {
+"name": "Kolaka Utara",
+"province_id": 30
+},
+"konawe kepulauan": {
+"name": "Konawe Kepulauan",
+"province_id": 30
+},
+"konawe selatan": {
+"name": "Konawe Selatan",
+"province_id": 30
+},
+"konawe utara": {
+"name": "Konawe Utara",
+"province_id": 30
+},
+"kotabaru": {
+"name": "Kotabaru",
+"province_id": 22
+},
+"kotawaringin barat": {
+"name": "Kotawaringin Barat",
+"province_id": 21
+},
+"kotawaringin timur": {
+"name": "Kotawaringin Timur",
+"province_id": 21
+},
+"kudus": {
+"name": "Kudus",
+"province_id": 14
+},
+"kulon progo": {
+"name": "Kulon Progo",
+"province_id": 15
+},
+"kuningan": {
+"name": "Kuningan",
+"province_id": 12
+},
+"kupang": {
+"name": "Kupang",
+"province_id": 19
+},
+"kutai kartanegara": {
+"name": "Kutai Kartanegara",
+"province_id": 23
+},
+"kutai timur": {
+"name": "Kutai Timur",
+"province_id": 23
+},
+"labuhanbatu": {
+"name": "Labuhanbatu",
+"province_id": 2
+},
+"labuhanbatu selatan": {
+"name": "Labuhanbatu Selatan",
+"province_id": 2
+},
+"lahat": {
+"name": "Lahat",
+"province_id": 7
+},
+"lamongan": {
+"name": "Lamongan",
+"province_id": 16
+},
+"lampung barat": {
+"name": "Lampung Barat",
+"province_id": 10
+},
+"lampung selatan": {
+"name": "Lampung Selatan",
+"province_id": 10
+},
+"lampung tengah": {
+"name": "Lampung Tengah",
+"province_id": 10
+},
+"lampung timur": {
+"name": "Lampung Timur",
+"province_id": 10
+},
+"lampung utara": {
+"name": "Lampung Utara",
+"province_id": 10
+},
+"landak": {
+"name": "Landak",
+"province_id": 20
+},
+"langkat": {
+"name": "Langkat",
+"province_id": 2
+},
+"lebak": {
+"name": "Lebak",
+"province_id": 13
+},
+"lhokseumawe": {
+"name": "Lhokseumawe",
+"province_id": 1
+},
+"lombok barat": {
+"name": "Lombok Barat",
+"province_id": 18
+},
+"lombok tengah": {
+"name": "Lombok Tengah",
+"province_id": 18
+},
+"lombok timur": {
+"name": "Lombok Timur",
+"province_id": 18
+},
+"lombok utara": {
+"name": "Lombok Utara",
+"province_id": 18
+},
+"lubuk linggau": {
+"name": "Lubuk Linggau",
+"province_id": 7
+},
+"lumajang": {
+"name": "Lumajang",
+"province_id": 16
+},
+"luwu": {
+"name": "Luwu",
+"province_id": 29
+},
+"luwu timur": {
+"name": "Luwu Timur",
+"province_id": 29
+},
+"luwu utara": {
+"name": "Luwu Utara",
+"province_id": 29
+},
+"madiun": {
+"name": "Madiun",
+"province_id": 16
+},
+"magelang": {
+"name": "Magelang",
+"province_id": 14
+},
+"magetan": {
+"name": "Magetan",
+"province_id": 16
+},
+"majalengka": {
+"name": "Majalengka",
+"province_id": 12
+},
+"majene": {
+"name": "Majene",
+"province_id": 28
+},
+"makassar": {
+"name": "Makassar",
+"province_id": 29
+},
+"malang": {
+"name": "Malang",
+"province_id": 16
+},
+"maluku tengah": {
+"name": "Maluku Tengah",
+"province_id": 31
+},
+"mamuju": {
+"name": "Mamuju",
+"province_id": 28
+},
+"mamuju utara": {
+"name": "Mamuju Utara",
+"province_id": 28
+},
+"manado": {
+"name": "Manado",
+"province_id": 25
+},
+"mandailing natal": {
+"name": "Mandailing Natal",
+"province_id": 2
+},
+"manggarai barat": {
+"name": "Manggarai Barat",
+"province_id": 19
+},
+"maros": {
+"name": "Maros",
+"province_id": 29
+},
+"mataram": {
+"name": "Mataram",
+"province_id": 18
+},
+"medan": {
+"name": "Medan",
+"province_id": 2
+},
+"mempawah": {
+"name": "Mempawah",
+"province_id": 20
+},
+"merangin": {
+"name": "Merangin",
+"province_id": 6
+},
+"mesuji": {
+"name": "Mesuji",
+"province_id": 10
+},
+"metro": {
+"name": "Metro",
+"province_id": 10
+},
+"mimika": {
+"name": "Mimika",
+"province_id": 36
+},
+"minahasa": {
+"name": "Minahasa",
+"province_id": 25
+},
+"minahasa utara": {
+"name": "Minahasa Utara",
+"province_id": 25
+},
+"mojokerto": {
+"name": "Mojokerto",
+"province_id": 16
+},
+"morowali utara": {
+"name": "Morowali Utara",
+"province_id": 27
+},
+"muara enim": {
+"name": "Muara Enim",
+"province_id": 7
+},
+"muaro jambi": {
+"name": "Muaro Jambi",
+"province_id": 6
+},
+"muko muko": {
+"name": "Muko Muko",
+"province_id": 9
+},
+"muna": {
+"name": "Muna",
+"province_id": 30
+},
+"murung raya": {
+"name": "Murung Raya",
+"province_id": 21
+},
+"musi rawas": {
+"name": "Musi Rawas",
+"province_id": 7
+},
+"musi rawas utara": {
+"name": "Musi Rawas Utara",
+"province_id": 7
+},
+"nagan raya": {
+"name": "Nagan Raya",
+"province_id": 1
+},
+"natuna": {
+"name": "Natuna",
+"province_id": 5
+},
+"nganjuk": {
+"name": "Nganjuk",
+"province_id": 16
+},
+"ngawi": {
+"name": "Ngawi",
+"province_id": 16
+},
+"nunukan": {
+"name": "Nunukan",
+"province_id": 24
+},
+"ogan komering ilir": {
+"name": "Ogan Komering Ilir",
+"province_id": 7
+},
+"ogan komering ulu": {
+"name": "Ogan Komering Ulu",
+"province_id": 7
+},
+"ogan komering ulu timur": {
+"name": "Ogan Komering Ulu Timur",
+"province_id": 7
+},
+"pacitan": {
+"name": "Pacitan",
+"province_id": 16
+},
+"padang": {
+"name": "Padang",
+"province_id": 3
+},
+"padang lawas": {
+"name": "Padang Lawas",
+"province_id": 2
+},
+"padang lawas utara": {
+"name": "Padang Lawas Utara",
+"province_id": 2
+},
+"padang panjang": {
+"name": "Padang Panjang",
+"province_id": 3
+},
+"padang pariaman": {
+"name": "Padang Pariaman",
+"province_id": 3
+},
+"padangsidimpuan": {
+"name": "Padangsidimpuan",
+"province_id": 2
+},
+"pagar alam": {
+"name": "Pagar Alam",
+"province_id": 7
+},
+"pahuwato": {
+"name": "Pahuwato",
+"province_id": 26
+},
+"palangkaraya": {
+"name": "Palangkaraya",
+"province_id": 21
+},
+"palembang": {
+"name": "Palembang",
+"province_id": 7
+},
+"palopo": {
+"name": "Palopo",
+"province_id": 29
+},
+"palu": {
+"name": "Palu",
+"province_id": 27
+},
+"pamekasan": {
+"name": "Pamekasan",
+"province_id": 16
+},
+"pandeglang": {
+"name": "Pandeglang",
+"province_id": 13
+},
+"pangandaran": {
+"name": "Pangandaran",
+"province_id": 12
+},
+"pangkajene kepulauan": {
+"name": "Pangkajene Kepulauan",
+"province_id": 29
+},
+"pangkal pinang": {
+"name": "Pangkal Pinang",
+"province_id": 8
+},
+"pare pare": {
+"name": "Pare Pare",
+"province_id": 29
+},
+"pariaman": {
+"name": "Pariaman",
+"province_id": 3
+},
+"parigi moutong": {
+"name": "Parigi Moutong",
+"province_id": 27
+},
+"pasaman": {
+"name": "Pasaman",
+"province_id": 3
+},
+"pasaman barat": {
+"name": "Pasaman Barat",
+"province_id": 3
+},
+"paser": {
+"name": "Paser",
+"province_id": 23
+},
+"pasuruan": {
+"name": "Pasuruan",
+"province_id": 16
+},
+"pati": {
+"name": "Pati",
+"province_id": 14
+},
+"payakumbuh": {
+"name": "Payakumbuh",
+"province_id": 3
+},
+"pekalongan": {
+"name": "Pekalongan",
+"province_id": 14
+},
+"pekanbaru": {
+"name": "Pekanbaru",
+"province_id": 4
+},
+"pelalawan": {
+"name": "Pelalawan",
+"province_id": 4
+},
+"pemalang": {
+"name": "Pemalang",
+"province_id": 14
+},
+"pematangsiantar": {
+"name": "Pematangsiantar",
+"province_id": 2
+},
+"penajam paser utara": {
+"name": "Penajam Paser Utara",
+"province_id": 23
+},
+"pesawaran": {
+"name": "Pesawaran",
+"province_id": 10
+},
+"pesisir selatan": {
+"name": "Pesisir Selatan",
+"province_id": 3
+},
+"pidie": {
+"name": "Pidie",
+"province_id": 1
+},
+"pidie jaya": {
+"name": "Pidie Jaya",
+"province_id": 1
+},
+"pinrang": {
+"name": "Pinrang",
+"province_id": 29
+},
+"polewali mandar": {
+"name": "Polewali Mandar",
+"province_id": 28
+},
+"ponorogo": {
+"name": "Ponorogo",
+"province_id": 16
+},
+"pontianak": {
+"name": "Pontianak",
+"province_id": 20
+},
+"poso": {
+"name": "Poso",
+"province_id": 27
+},
+"prabumulih": {
+"name": "Prabumulih",
+"province_id": 7
+},
+"pringsewu": {
+"name": "Pringsewu",
+"province_id": 10
+},
+"probolinggo": {
+"name": "Probolinggo",
+"province_id": 16
+},
+"purbalingga": {
+"name": "Purbalingga",
+"province_id": 14
+},
+"purwakarta": {
+"name": "Purwakarta",
+"province_id": 12
+},
+"purworejo": {
+"name": "Purworejo",
+"province_id": 14
+},
+"rembang": {
+"name": "Rembang",
+"province_id": 14
+},
+"rokan hulu": {
+"name": "Rokan Hulu",
+"province_id": 4
+},
+"sabang": {
+"name": "Sabang",
+"province_id": 1
+},
+"salatiga": {
+"name": "Salatiga",
+"province_id": 14
+},
+"samarinda": {
+"name": "Samarinda",
+"province_id": 23
+},
+"sambas": {
+"name": "Sambas",
+"province_id": 20
+},
+"samosir": {
+"name": "Samosir",
+"province_id": 2
+},
+"sampang": {
+"name": "Sampang",
+"province_id": 16
+},
+"sawahlunto": {
+"name": "Sawahlunto",
+"province_id": 3
+},
+"seluma": {
+"name": "Seluma",
+"province_id": 9
+},
+"semarang": {
+"name": "Semarang",
+"province_id": 14
+},
+"seram bagian barat": {
+"name": "Seram Bagian Barat",
+"province_id": 31
+},
+"serang": {
+"name": "Serang",
+"province_id": 13
+},
+"serdang bedagai": {
+"name": "Serdang Bedagai",
+"province_id": 2
+},
+"seruyan": {
+"name": "Seruyan",
+"province_id": 21
+},
+"siak": {
+"name": "Siak",
+"province_id": 4
+},
+"sidenreng rappang": {
+"name": "Sidenreng Rappang",
+"province_id": 29
+},
+"sidoarjo": {
+"name": "Sidoarjo",
+"province_id": 16
+},
+"sijunjung": {
+"name": "Sijunjung",
+"province_id": 3
+},
+"sikka": {
+"name": "Sikka",
+"province_id": 19
+},
+"simalungun": {
+"name": "Simalungun",
+"province_id": 2
+},
+"simeulue": {
+"name": "Simeulue",
+"province_id": 1
+},
+"singkawang": {
+"name": "Singkawang",
+"province_id": 20
+},
+"sinjai": {
+"name": "Sinjai",
+"province_id": 29
+},
+"sintang": {
+"name": "Sintang",
+"province_id": 20
+},
+"situbondo": {
+"name": "Situbondo",
+"province_id": 16
+},
+"sleman": {
+"name": "Sleman",
+"province_id": 15
+},
+"solok": {
+"name": "Solok",
+"province_id": 3
+},
+"solok selatan": {
+"name": "Solok Selatan",
+"province_id": 3
+},
+"soppeng": {
+"name": "Soppeng",
+"province_id": 29
+},
+"sorong": {
+"name": "Sorong",
+"province_id": 35
+},
+"sragen": {
+"name": "Sragen",
+"province_id": 14
+},
+"subang": {
+"name": "Subang",
+"province_id": 12
+},
+"subulussalam": {
+"name": "Subulussalam",
+"province_id": 1
+},
+"sukabumi": {
+"name": "Sukabumi",
+"province_id": 12
+},
+"sukoharjo": {
+"name": "Sukoharjo",
+"province_id": 14
+},
+"sumbawa": {
+"name": "Sumbawa",
+"province_id": 18
+},
+"sumbawa barat": {
+"name": "Sumbawa Barat",
+"province_id": 18
+},
+"sumedang": {
+"name": "Sumedang",
+"province_id": 12
+},
+"sumenep": {
+"name": "Sumenep",
+"province_id": 16
+},
+"sungai penuh": {
+"name": "Sungai Penuh",
+"province_id": 6
+},
+"surabaya": {
+"name": "Surabaya",
+"province_id": 16
+},
+"surakarta": {
+"name": "Surakarta",
+"province_id": 14
+},
+"tabalong": {
+"name": "Tabalong",
+"province_id": 22
+},
+"tabanan": {
+"name": "Tabanan",
+"province_id": 17
+},
+"takalar": {
+"name": "Takalar",
+"province_id": 29
+},
+"tanah bumbu": {
+"name": "Tanah Bumbu",
+"province_id": 22
+},
+"tanah datar": {
+"name": "Tanah Datar",
+"province_id": 3
+},
+"tanah laut": {
+"name": "Tanah Laut",
+"province_id": 22
+},
+"tangerang": {
+"name": "Tangerang",
+"province_id": 13
+},
+"tangerang selatan": {
+"name": "Tangerang Selatan",
+"province_id": 13
+},
+"tanggamus": {
+"name": "Tanggamus",
+"province_id": 10
+},
+"tanjung jabung barat": {
+"name": "Tanjung Jabung Barat",
+"province_id": 6
+},
+"tanjung jabung timur": {
+"name": "Tanjung Jabung Timur",
+"province_id": 6
+},
+"tanjung pinang": {
+"name": "Tanjung Pinang",
+"province_id": 5
+},
+"tapanuli utara": {
+"name": "Tapanuli Utara",
+"province_id": 2
+},
+"tapin": {
+"name": "Tapin",
+"province_id": 22
+},
+"tarakan": {
+"name": "Tarakan",
+"province_id": 24
+},
+"tasikmalaya": {
+"name": "Tasikmalaya",
+"province_id": 12
+},
+"tebo": {
+"name": "Tebo",
+"province_id": 6
+},
+"tegal": {
+"name": "Tegal",
+"province_id": 14
+},
+"temanggung": {
+"name": "Temanggung",
+"province_id": 14
+},
+"ternate": {
+"name": "Ternate",
+"province_id": 32
+},
+"tidore kepulauan": {
+"name": "Tidore Kepulauan",
+"province_id": 32
+},
+"timor tengah utara": {
+"name": "Timor Tengah Utara",
+"province_id": 19
+},
+"tojo una una": {
+"name": "Tojo Una Una",
+"province_id": 27
+},
+"toli toli": {
+"name": "Toli Toli",
+"province_id": 27
+},
+"toraja utara": {
+"name": "Toraja Utara",
+"province_id": 29
+},
+"trenggalek": {
+"name": "Trenggalek",
+"province_id": 16
+},
+"tuban": {
+"name": "Tuban",
+"province_id": 16
+},
+"tulang bawang": {
+"name": "Tulang Bawang",
+"province_id": 10
+},
+"tulang bawang barat": {
+"name": "Tulang Bawang Barat",
+"province_id": 10
+},
+"tulungagung": {
+"name": "Tulungagung",
+"province_id": 16
+},
+"wajo": {
+"name": "Wajo",
+"province_id": 29
+},
+"wakatobi": {
+"name": "Wakatobi",
+"province_id": 30
+},
+"way kanan": {
+"name": "Way Kanan",
+"province_id": 10
+},
+"wonogiri": {
+"name": "Wonogiri",
+"province_id": 14
+},
+"wonosobo": {
+"name": "Wonosobo",
+"province_id": 14
+},
+"yogyakarta": {
+"name": "Yogyakarta",
+"province_id": 15
+}
+}

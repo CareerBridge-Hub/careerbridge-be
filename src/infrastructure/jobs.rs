@@ -21,6 +21,8 @@ pub enum Provider {
     Breezy,
     /// Google for Jobs via OpenWeb Ninja: multi-employer, API-key and quota billed.
     GoogleJobs,
+    /// Native ports of the production Python import sources.
+    Extract,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Source {
@@ -29,7 +31,7 @@ pub struct Source {
     pub board: &'static str,
     pub provider: Provider,
 }
-pub const SOURCES: [Source; 6] = [
+pub const SOURCES: [Source; 48] = [
     Source {
         key: "grab",
         company: "Grab",
@@ -66,6 +68,258 @@ pub const SOURCES: [Source; 6] = [
         company: "",
         board: "",
         provider: Provider::GoogleJobs,
+    },
+    Source {
+        key: "kalibrr",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "techinasia",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "jobstreet",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "glints",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "dealls",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "linkedin",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-xendit",
+        company: "Xendit",
+        board: "xendit",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "lever-ninjavan",
+        company: "Ninja Van",
+        board: "ninjavan",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "lever-lalamove",
+        company: "Lalamove",
+        board: "lalamove",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "workable-amartha",
+        company: "Amartha",
+        board: "amartha",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "workable-ajaib",
+        company: "Ajaib",
+        board: "ajaib",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "workable-fundingsocieties",
+        company: "Funding Societies",
+        board: "fundingsocieties",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "kitalulus",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "karir",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "indeed",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "glassdoor",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "remotive",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "remoteok",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "arbeitnow",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "hackernews",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "adzuna",
+        company: "",
+        board: "",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-binance",
+        company: "binance",
+        board: "binance",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-okx",
+        company: "okx",
+        board: "okx",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-datadog",
+        company: "datadog",
+        board: "datadog",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-airbnb",
+        company: "airbnb",
+        board: "airbnb",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-stripe",
+        company: "stripe",
+        board: "stripe",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "greenhouse-gitlab",
+        company: "gitlab",
+        board: "gitlab",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "lever-nium",
+        company: "nium",
+        board: "nium",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "lever-dlocal",
+        company: "dlocal",
+        board: "dlocal",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "lever-palantir",
+        company: "palantir",
+        board: "palantir",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "lever-spotify",
+        company: "spotify",
+        board: "spotify",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "ashby-airwallex",
+        company: "airwallex",
+        board: "airwallex",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "ashby-notion",
+        company: "notion",
+        board: "notion",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "ashby-openai",
+        company: "openai",
+        board: "openai",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "ashby-ramp",
+        company: "ramp",
+        board: "ramp",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-alodokter",
+        company: "alodokter",
+        board: "alodokter",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-stockbit",
+        company: "stockbit",
+        board: "stockbit",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-bukuwarung",
+        company: "bukuwarung",
+        board: "bukuwarung",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-sayurbox",
+        company: "sayurbox",
+        board: "sayurbox",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-dekoruma",
+        company: "dekoruma",
+        board: "dekoruma",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-julo",
+        company: "julo",
+        board: "julo",
+        provider: Provider::Extract,
+    },
+    Source {
+        key: "smartrecruiters-pasarpolis",
+        company: "pasarpolis",
+        board: "pasarpolis",
+        provider: Provider::Extract,
     },
 ];
 const DAY: Duration = Duration::from_secs(86_400);
@@ -140,7 +394,7 @@ impl Settings {
         }
         let google = GoogleJobs::from_env()?;
         let keys = std::env::var("JOB_SCRAPE_SOURCES").unwrap_or_else(|_| {
-            let mut keys = String::from("grab,cermati,dkatalis,softwareseni,kredivo");
+            let mut keys = String::from("grab,cermati,dkatalis,softwareseni,kredivo,kalibrr,techinasia,jobstreet,glints,dealls,linkedin,greenhouse-xendit,lever-ninjavan,lever-lalamove,workable-amartha,workable-ajaib,workable-fundingsocieties");
             if google.api_key.is_some() {
                 keys.push_str(",openwebninja");
             }
@@ -283,6 +537,7 @@ fn allowed_url(source: Source, raw: &str) -> bool {
                 }
                 // Publishers vary (LinkedIn, Indeed, employer sites). The importer never
                 // fetches these links; require a public DNS name, not an IP literal.
+                Provider::Extract => super::extract::jobs::allowed_posting(source.key, &u),
                 Provider::GoogleJobs => u
                     .domain()
                     .is_some_and(|d| d.contains('.') && !d.eq_ignore_ascii_case("localhost")),
@@ -290,7 +545,7 @@ fn allowed_url(source: Source, raw: &str) -> bool {
     })
 }
 impl Vacancy {
-    fn validate(&self, source: Source) -> Result<(), AppError> {
+    pub(crate) fn validate(&self, source: Source) -> Result<(), AppError> {
         if self.source != source.key
             || self.source_id.is_empty()
             || self.source_id.len() > 128
@@ -396,7 +651,7 @@ impl Collector {
             Provider::Smart => self.smart(source).await?,
             Provider::Greenhouse => self.greenhouse(source).await?,
             Provider::Breezy => self.breezy(source).await?,
-            Provider::GoogleJobs => {
+            Provider::Extract | Provider::GoogleJobs => {
                 return Err(AppError::Invalid(
                     "Metered sources run from the search queue",
                 ));
@@ -805,16 +1060,18 @@ pub async fn sync_source(
 ) -> Result<Outcome, AppError> {
     let interval = if source.metered() {
         interval.max(DAY)
+    } else if matches!(source.provider, Provider::Extract) {
+        interval.max(Duration::from_secs(43200))
     } else {
         interval
     };
-    let retry = if source.metered() {
+    let retry = if source.metered() || matches!(source.provider, Provider::Extract) {
         interval
     } else {
         Duration::from_secs(900)
     };
     let run = Uuid::new_v4();
-    let claimed=sqlx::query("UPDATE job_sources SET run_id=$2,lease_until=now()+interval '10 minutes' WHERE key=$1 AND (lease_until IS NULL OR lease_until<now()) AND ($3 OR next_run_at<=now())").bind(source.key).bind(run).bind(force).execute(pool).await?.rows_affected();
+    let claimed=sqlx::query("UPDATE job_sources SET run_id=$2,lease_until=now()+interval '35 minutes' WHERE key=$1 AND (lease_until IS NULL OR lease_until<now()) AND ($3 OR next_run_at<=now())").bind(source.key).bind(run).bind(force).execute(pool).await?.rows_affected();
     if claimed == 0 {
         return Ok(Outcome {
             source: source.key.into(),
@@ -824,16 +1081,25 @@ pub async fn sync_source(
     }
     tracing::info!(source = source.key, "vacancy collection started");
     let collected = async {
-        if source.metered() {
+        if matches!(source.provider, Provider::Extract) {
+            super::extract::jobs::collect(pool, source).await
+        } else if source.metered() {
             let batch = next_queries(pool, collector.google.per_run).await?;
             collector.google_jobs(source, &batch).await
         } else {
             Ok((collector.collect(source).await?, vec![]))
         }
     };
-    let result = tokio::time::timeout(Duration::from_secs(300), collected)
-        .await
-        .unwrap_or(Err(AppError::Provider));
+    let result = tokio::time::timeout(
+        Duration::from_secs(if matches!(source.provider, Provider::Extract) {
+            1800
+        } else {
+            300
+        }),
+        collected,
+    )
+    .await
+    .unwrap_or(Err(AppError::Provider));
     let result = match result {
         Ok((jobs, stats)) => persist(pool, source, run, &jobs, &stats, interval)
             .await
@@ -842,6 +1108,11 @@ pub async fn sync_source(
     };
     match result {
         Ok(count) => {
+            if source.key == "linkedin"
+                && let Err(error) = super::extract::jobs::enrich_linkedin(pool).await
+            {
+                tracing::warn!(source="linkedin",error=%error,"detail backlog retained for retry");
+            }
             tracing::info!(source = source.key, count, "vacancy import completed");
             Ok(Outcome {
                 source: source.key.into(),
@@ -857,7 +1128,7 @@ pub async fn sync_source(
         }
     }
 }
-async fn persist(
+pub(crate) async fn persist(
     pool: &PgPool,
     source: Source,
     run: Uuid,
@@ -885,7 +1156,8 @@ async fn persist(
     .await?;
     // Search results are a rotating sample, not a full employer snapshot: never close
     // unseen rows; RLS hides rows not re-seen within 7 days.
-    let snapshot = !source.metered();
+    let snapshot = !source.metered()
+        && (!matches!(source.provider, Provider::Extract) || !source.board.is_empty());
     if snapshot && previous > 10 && (jobs.len() as i64) * 2 < previous {
         return Err(AppError::Invalid(
             "Unexpected vacancy count drop; review source before closing records",
@@ -898,12 +1170,26 @@ async fn persist(
             format!("careerbridge:vacancy:{}:{}", source.key, job.source_id).as_bytes(),
         );
         // A missing catalog occupation leaves occupation_id NULL rather than failing the import.
-        sqlx::query("INSERT INTO job_vacancies(id,source,source_id,company,title,country,city,region,workplace,employment_type,description,requirements,apply_url,source_url,posted_at,valid_until,last_seen_run,occupation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18,(SELECT id FROM occupations WHERE nama=$19))) ON CONFLICT(source,source_id) DO UPDATE SET company=EXCLUDED.company,title=EXCLUDED.title,country=EXCLUDED.country,city=EXCLUDED.city,region=EXCLUDED.region,workplace=EXCLUDED.workplace,employment_type=EXCLUDED.employment_type,description=EXCLUDED.description,requirements=EXCLUDED.requirements,apply_url=EXCLUDED.apply_url,source_url=EXCLUDED.source_url,posted_at=EXCLUDED.posted_at,valid_until=EXCLUDED.valid_until,last_seen_run=EXCLUDED.last_seen_run,occupation_id=COALESCE(EXCLUDED.occupation_id,job_vacancies.occupation_id),last_seen_at=now(),updated_at=now(),status='active'")
-            .bind(id).bind(source.key).bind(&job.source_id).bind(&job.company).bind(&job.title).bind(&job.country).bind(&job.city).bind(&job.region).bind(&job.workplace).bind(&job.employment_type).bind(&job.description).bind(&job.requirements).bind(&job.apply_url).bind(&job.source_url).bind(job.posted_at).bind(job.valid_until).bind(run).bind(job.occupation_id).bind(feed_occupation(&job.title)).execute(&mut *tx).await?;
-        let text = format!("{}\n{}\n{}", job.title, job.description, job.requirements);
+        let stored=sqlx::query("INSERT INTO job_vacancies(id,source,source_id,company,title,country,city,region,workplace,employment_type,description,requirements,apply_url,source_url,posted_at,valid_until,last_seen_run,occupation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18,(SELECT id FROM occupations WHERE nama=$19))) ON CONFLICT(source,source_id) DO UPDATE SET company=EXCLUDED.company,title=EXCLUDED.title,country=EXCLUDED.country,city=EXCLUDED.city,region=EXCLUDED.region,workplace=EXCLUDED.workplace,employment_type=EXCLUDED.employment_type,description=CASE WHEN job_vacancies.source='linkedin' AND job_vacancies.detail_complete AND position('Deskripsi lengkap:' in EXCLUDED.description)>0 THEN job_vacancies.description ELSE EXCLUDED.description END,requirements=CASE WHEN job_vacancies.source='linkedin' AND job_vacancies.detail_complete AND position('Deskripsi lengkap:' in EXCLUDED.description)>0 THEN job_vacancies.requirements ELSE EXCLUDED.requirements END,apply_url=EXCLUDED.apply_url,source_url=EXCLUDED.source_url,posted_at=EXCLUDED.posted_at,valid_until=EXCLUDED.valid_until,last_seen_run=EXCLUDED.last_seen_run,occupation_id=COALESCE(EXCLUDED.occupation_id,job_vacancies.occupation_id),last_seen_at=now(),updated_at=now(),status='active' RETURNING description,requirements")
+            .bind(id).bind(source.key).bind(&job.source_id).bind(&job.company).bind(&job.title).bind(&job.country).bind(&job.city).bind(&job.region).bind(&job.workplace).bind(&job.employment_type).bind(&job.description).bind(&job.requirements).bind(&job.apply_url).bind(&job.source_url).bind(job.posted_at).bind(job.valid_until).bind(run).bind(job.occupation_id).bind(feed_occupation(&job.title)).fetch_one(&mut *tx).await?;
+        if source.key == "linkedin" {
+            sqlx::query("UPDATE job_vacancies SET detail_complete=position('Deskripsi lengkap:' in description)=0 WHERE id=$1")
+                .bind(id).execute(&mut *tx).await?;
+        }
+        let text = format!(
+            "{}\n{}\n{}",
+            job.title,
+            stored.get::<String, _>("description"),
+            stored.get::<String, _>("requirements")
+        );
         tag_vacancy(&mut tx, id, &text, &index).await?;
     }
-    if !queue_stats.is_empty() {
+    if matches!(source.provider, Provider::Extract) {
+        for (query_id, count) in queue_stats {
+            sqlx::query("INSERT INTO extract_query_runs(source,query_id,last_run_at,last_count) VALUES($1,$2,now(),$3) ON CONFLICT(source,query_id) DO UPDATE SET last_run_at=EXCLUDED.last_run_at,last_count=EXCLUDED.last_count")
+                .bind(source.key).bind(query_id).bind(count).execute(&mut *tx).await?;
+        }
+    } else if !queue_stats.is_empty() {
         let (ids, counts): (Vec<Uuid>, Vec<i32>) = queue_stats.iter().copied().unzip();
         sqlx::query("UPDATE job_search_queries q SET last_run_at=now(),last_count=s.n,zero_streak=CASE WHEN s.n=0 THEN q.zero_streak+1 ELSE 0 END FROM unnest($1::uuid[],$2::int[]) s(id,n) WHERE q.id=s.id")
             .bind(ids).bind(counts).execute(&mut *tx).await?;
@@ -916,7 +1202,7 @@ async fn persist(
     Ok(())
 }
 /// Replaces a vacancy's skill tags with the catalog skills its text mentions.
-async fn tag_vacancy(
+pub(crate) async fn tag_vacancy(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     vacancy: Uuid,
     text: &str,
@@ -959,6 +1245,17 @@ pub async fn retag_all(pool: &PgPool) -> Result<u64, AppError> {
     Ok(rows.len() as u64)
 }
 pub async fn run_pass(pool: &PgPool, settings: &Settings, force: bool) -> bool {
+    let keys: Vec<&str> = settings.sources.iter().map(|s| s.key).collect();
+    if sqlx::query(
+        "UPDATE job_sources SET managed_by='rust' WHERE key=ANY($1) AND managed_by<>'rust'",
+    )
+    .bind(keys)
+    .execute(pool)
+    .await
+    .is_err()
+    {
+        return false;
+    }
     let Ok(collector) = Collector::new(settings.google.clone()) else {
         return false;
     };
@@ -1007,6 +1304,17 @@ pub struct VacancyItem {
     pub missing_skill_ids: Vec<Uuid>,
 }
 #[derive(Serialize, utoipa::ToSchema)]
+pub struct VacancySourceOption {
+    pub key: String,
+    pub name: String,
+}
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct VacancyOccupationOption {
+    pub id: Uuid,
+    pub nama: String,
+}
+#[derive(Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct VacancyPage {
     pub items: Vec<VacancyItem>,
     pub total: i64,
@@ -1014,6 +1322,8 @@ pub struct VacancyPage {
     pub limit: i64,
     /// Labels for every skill id referenced by the items on this page.
     pub skills: Vec<crate::domain::Skill>,
+    pub source_options: Vec<VacancySourceOption>,
+    pub occupation_options: Vec<VacancyOccupationOption>,
 }
 #[derive(Deserialize, utoipa::IntoParams)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -1120,7 +1430,7 @@ pub async fn page(
         .collect();
     let skills = browsing::by_ids(pool, "skills", &skill_ids).await?;
     Ok(
-        serde_json::json!({"items":items,"total":total,"offset":p.offset,"limit":p.limit,"occupationOptions":options,"skills":skills}),
+        serde_json::json!({"items":items,"total":total,"offset":p.offset,"limit":p.limit,"occupationOptions":options,"sourceOptions":SOURCES.iter().map(|s|serde_json::json!({"key":s.key,"name":if s.company.is_empty(){s.key}else{s.company}})).collect::<Vec<_>>(),"skills":skills}),
     )
 }
 
@@ -1330,7 +1640,7 @@ mod tests {
             .await
             .unwrap();
         assert!(dbname.contains("test"), "disposable test database required");
-        sqlx::query("TRUNCATE job_vacancies")
+        sqlx::query("TRUNCATE vacancy_skills, job_vacancies")
             .execute(&owner)
             .await
             .unwrap();
@@ -1446,7 +1756,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 0);
-        sqlx::query("TRUNCATE job_vacancies")
+        sqlx::query("TRUNCATE vacancy_skills, job_vacancies")
             .execute(&owner)
             .await
             .unwrap();

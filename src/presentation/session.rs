@@ -53,6 +53,7 @@ impl CookieAuth {
                 .and_then(|v| v.to_str().ok())
                 != Some("1")
         {
+            tracing::warn!(event = "csrf_rejected", "security request rejected");
             return Err(AppError::Forbidden);
         }
         Ok(())
@@ -68,6 +69,7 @@ impl CookieAuth {
         let entry = limits.entry(ip).or_insert((Instant::now(), 0));
         entry.1 += 1;
         if entry.1 > 20 {
+            tracing::warn!(event = "auth_rate_limited", "security request rejected");
             return Err(AppError::Busy);
         }
         Ok(())
@@ -132,6 +134,11 @@ async fn provider(
     }
     let response = request.send().await.map_err(|_| AppError::Provider)?;
     if !response.status().is_success() {
+        tracing::warn!(
+            event = "auth_provider_rejected",
+            status = response.status().as_u16(),
+            "authentication provider rejected request"
+        );
         return Err(if response.status().as_u16() == 429 {
             AppError::Busy
         } else if response.status().is_server_error() {

@@ -18,11 +18,12 @@ COPY docs/swagger-ui/ ./docs/swagger-ui/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/build/target \
-    cargo build --locked --release --bin careerbridge-be --bin migrate --bin verify-model --bin job-import --bin diagnose-cv \
+    cargo build --locked --release --bin careerbridge-be --bin migrate --bin verify-model --bin job-import --bin skillhub-import --bin diagnose-cv \
     && install -D -m 0555 target/release/careerbridge-be /out/careerbridge-be \
     && install -D -m 0555 target/release/migrate /out/migrate \
     && install -D -m 0555 target/release/verify-model /out/verify-model \
     && install -D -m 0555 target/release/job-import /out/job-import \
+    && install -D -m 0555 target/release/skillhub-import /out/skillhub-import \
     && install -D -m 0555 target/release/diagnose-cv /out/diagnose-cv
 
 # Fetch immutable, hash-verified model assets without application credentials.
@@ -86,6 +87,7 @@ FROM runtime-base AS runtime
 COPY --from=build --chmod=0555 /out/careerbridge-be /usr/local/bin/careerbridge-be
 COPY --from=build --chmod=0555 /out/verify-model /usr/local/bin/verify-model
 COPY --from=build --chmod=0555 /out/job-import /usr/local/bin/job-import
+COPY --from=build --chmod=0555 /out/skillhub-import /usr/local/bin/skillhub-import
 COPY --from=build --chmod=0555 /out/diagnose-cv /usr/local/bin/diagnose-cv
 COPY --from=model-assets --chown=10001:10001 /out/model-cache/ /app/model-cache/
 ENV EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3 \

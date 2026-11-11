@@ -8,10 +8,18 @@ fn bad(client: Client, validation: Validation, input: String) {
     validation.insecure_disable_signature_validation();
     // ruleid: rust-disable-jwt-expiry-validation
     validation.validate_exp = false;
+    // ruleid: rust-disable-jwt-audience-validation
+    validation.validate_aud = false;
+    // ruleid: rust-disable-jwt-not-before-validation
+    validation.validate_nbf = false;
     // ruleid: rust-permissive-cors
     actix_cors::Cors::permissive();
     // ruleid: rust-permissive-cors
     Cors::permissive();
+    // ruleid: rust-permissive-cors
+    cors.allow_any_origin();
+    // ruleid: rust-permissive-cors
+    cors.send_wildcard();
     // ruleid: rust-formatted-sql-query
     sqlx::query(format!("SELECT * FROM users WHERE nama='{}'", input));
     // ruleid: rust-formatted-sql-query
@@ -30,6 +38,10 @@ fn good(client: Client, validation: Validation, input: String) {
     client.danger_accept_invalid_certs(false);
     // ok: rust-disable-jwt-expiry-validation
     validation.validate_exp = true;
+    // ok: rust-disable-jwt-audience-validation
+    validation.validate_aud = true;
+    // ok: rust-disable-jwt-not-before-validation
+    validation.validate_nbf = true;
     // ok: rust-permissive-cors
     actix_cors::Cors::default().allowed_origin("https://example.test");
     // ok: rust-formatted-sql-query

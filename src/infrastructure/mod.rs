@@ -6,6 +6,7 @@ pub mod crypto;
 pub mod db;
 pub mod embedding;
 pub mod error;
+pub mod extract;
 pub mod jobs;
 pub mod llm;
 pub mod pdf;

@@ -152,6 +152,9 @@ async fn main() -> std::io::Result<()> {
     careerbridge_be::infrastructure::jobs::start(&c.database_url, job_settings)
         .await
         .map_err(std::io::Error::other)?;
+    careerbridge_be::infrastructure::extract::skillhub::start(&c.database_url)
+        .await
+        .map_err(std::io::Error::other)?;
     careerbridge_be::presentation::events::start_background(state.clone());
     tokio::spawn(worker::run(state));
 

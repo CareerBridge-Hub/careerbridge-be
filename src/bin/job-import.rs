@@ -15,11 +15,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let settings = Settings::from_env()?;
     match args.first().map(String::as_str) {
+        Some("--test-source") if args.len() == 3 => {
+            let source = jobs::SOURCES
+                .iter()
+                .find(|s| s.key == args[1])
+                .copied()
+                .ok_or("Unknown source")?;
+            let items =
+                careerbridge_be::infrastructure::extract::jobs::preview(source, &args[2]).await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &serde_json::json!({"source":source.key,"count":items.len(),"items":items,"databaseWrites":0})
+                )?
+            );
+        }
         Some("--preview") if args.len() == 1 => {
             let collector = Collector::new(settings.google.clone())?;
             let mut jobs = vec![];
             // Metered sources cost quota and need the DB queue; use --test-query instead.
-            for source in settings.sources.iter().filter(|s| !s.metered()) {
+            for source in settings
+                .sources
+                .iter()
+                .filter(|s| !s.metered() && !matches!(s.provider, jobs::Provider::Extract))
+            {
                 jobs.extend(collector.collect(*source).await?);
             }
             std::fs::create_dir_all(".cache/software-jobs")?;
@@ -70,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("--status") if args.len() == 1 => {
             let pool = jobs::importer_pool().await?;
-            let status:serde_json::Value=sqlx::query_scalar("SELECT jsonb_build_object('sources',(SELECT jsonb_agg(j ORDER BY key) FROM (SELECT s.key,s.last_success_at,s.last_count,s.last_error,s.next_run_at,s.lease_until,(SELECT count(*) FROM job_vacancies v WHERE v.source=s.key AND status='active') active_count FROM job_sources s) j),'searchQueue',(SELECT COALESCE(jsonb_agg(q ORDER BY q.enabled DESC,q.last_run_at NULLS FIRST,q.keyword),'[]') FROM (SELECT q.keyword,o.nama occupation,q.enabled,q.last_run_at,q.last_count,q.zero_streak,(SELECT count(*) FROM job_vacancies v WHERE v.occupation_id=q.occupation_id AND v.status='active') active_count FROM job_search_queries q JOIN occupations o ON o.id=q.occupation_id) q))").fetch_one(&pool).await?;
+            let status:serde_json::Value=sqlx::query_scalar("SELECT jsonb_build_object('sources',(SELECT jsonb_agg(j ORDER BY key) FROM (SELECT s.key,s.managed_by,s.last_success_at,s.last_count,s.last_error,s.next_run_at,s.lease_until,(SELECT count(*) FROM job_vacancies v WHERE v.source=s.key AND status='active' AND NOT detail_complete) pending_descriptions,(SELECT count(*) FROM job_vacancies v WHERE v.source=s.key AND status='active') active_count FROM job_sources s) j),'searchQueue',(SELECT COALESCE(jsonb_agg(q ORDER BY q.enabled DESC,q.last_run_at NULLS FIRST,q.keyword),'[]') FROM (SELECT q.keyword,o.nama occupation,q.enabled,q.last_run_at,q.last_count,q.zero_streak,(SELECT count(*) FROM job_vacancies v WHERE v.occupation_id=q.occupation_id AND v.status='active') active_count FROM job_search_queries q JOIN occupations o ON o.id=q.occupation_id) q))").fetch_one(&pool).await?;
             println!("{}", serde_json::to_string_pretty(&status)?);
         }
         Some("--retag") if args.len() == 1 => {
@@ -126,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "Usage: job-import --preview | --once [--force] | --daemon | --status | --retag | --test-query <keyword> [title-regex]".into(),
+                "Usage: job-import --preview | --once [--force] | --daemon | --status | --retag | --test-query <keyword> [title-regex] | --test-source <source> <keyword>".into(),
             );
         }
     }

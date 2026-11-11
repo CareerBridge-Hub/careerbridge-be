@@ -95,6 +95,9 @@ jobs:
           cargo test --locked --test core_integration admin_http_routes_require_database_role -- --ignored --exact
           cargo test --locked --test admin_integration -- --ignored --test-threads=1
           cargo test --locked --test vacancy_match_integration -- --ignored --test-threads=1
+          cargo test --locked --test native_extract_integration -- --ignored --test-threads=1
+          cargo test --locked --lib linkedin_repeat_search_keeps_real_description_and_unseen_jobs -- --ignored
+          cargo test --locked --lib database_upserts_closes_only_on_success_and_enforces_role_isolation -- --ignored
 
   rustsec:
     name: RustSec advisories in enabled dependencies

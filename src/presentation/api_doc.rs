@@ -18,6 +18,13 @@ pub struct OkResponse {
     pub ok: bool,
 }
 #[derive(ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillsSaved {
+    pub ok: bool,
+    /// Occupation from the confirmed CV's AI suggestion: the user's own occupation or the matching catalog one.
+    pub occupation_id: Option<Uuid>,
+}
+#[derive(ToSchema)]
 pub struct Health {
     pub status: String,
 }

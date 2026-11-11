@@ -1,5 +1,5 @@
 pub(super) const SKILLS_SQL: &str = "SELECT jsonb_build_object('id',s.id,'nama',s.nama,'kategori',s.kategori,'alias',coalesce((SELECT jsonb_agg(alias ORDER BY alias) FROM skill_aliases WHERE skill_id=s.id),'[]')) data FROM skills s ORDER BY s.nama,s.id";
-pub(super) const OCCUPATIONS_SQL: &str = "SELECT jsonb_build_object('id',o.id,'nama',o.nama,'kodeKbji',o.kode_kbji,'bidang',o.bidang,'deskripsi',o.deskripsi,'skills',coalesce((SELECT jsonb_agg(jsonb_build_object('skillId',skill_id,'tipe',tipe) ORDER BY skill_id) FROM occupation_skills WHERE occupation_id=o.id),'[]')) data FROM occupations o ORDER BY o.nama,o.id";
+pub(super) const OCCUPATIONS_SQL: &str = "SELECT jsonb_build_object('id',o.id,'nama',o.nama,'kodeKbji',o.kode_kbji,'bidang',o.bidang,'deskripsi',o.deskripsi,'custom',o.owner_id IS NOT NULL,'skills',coalesce((SELECT jsonb_agg(jsonb_build_object('skillId',skill_id,'tipe',tipe) ORDER BY skill_id) FROM occupation_skills WHERE occupation_id=o.id),'[]')) data FROM occupations o ORDER BY o.nama,o.id";
 pub(super) const INSTITUTIONS_SQL: &str = "SELECT jsonb_build_object('id',i.id,'nama',i.nama,'jenis',i.jenis,'provinsi',p.nama,'kota',i.kota,'website',i.website) data FROM institutions i JOIN provinces p ON p.id=i.province_id ORDER BY i.nama,i.id";
 pub(super) const TRAININGS_SQL: &str = "SELECT jsonb_build_object('id',t.id,'institutionId',t.institution_id,'nama',t.nama,'biaya',t.biaya,'moda',t.moda,'durasi',t.durasi,'urlDaftar',t.url_daftar,'sample',t.sample,'skillIds',coalesce((SELECT jsonb_agg(skill_id ORDER BY skill_id) FROM training_skills WHERE training_id=t.id),'[]')) data FROM trainings t WHERE t.aktif ORDER BY t.nama,t.id";
 use super::error::AppError;
@@ -107,6 +107,81 @@ pub async fn bump(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> Result<(), Ap
         .execute(&mut **tx)
         .await?;
     Ok(())
+}
+
+/// Saves an AI-inferred occupation as the user's single own occupation, replacing it in place
+/// so a target pointing at it survives. Runs in the caller's user transaction (RLS owner policy).
+/// Returns the occupation id, or `None` when the suggestion no longer fits the current catalog.
+pub async fn save_owned_occupation(
+    tx: &mut Transaction<'_, Postgres>,
+    user: Uuid,
+    suggestion: &OccupationSuggestion,
+) -> Result<Option<Uuid>, AppError> {
+    let OccupationSuggestion::Custom {
+        nama,
+        bidang,
+        deskripsi,
+        base_occupation_id,
+        wajib,
+        opsional,
+        ..
+    } = suggestion
+    else {
+        return Ok(None);
+    };
+    // The catalog may have changed since the CV was processed: keep only skills that still exist,
+    // and give up when an admin has since added a catalog occupation with the same name.
+    let all: Vec<Uuid> = wajib.iter().chain(opsional).copied().collect();
+    let known: std::collections::HashSet<Uuid> =
+        sqlx::query_scalar("SELECT id FROM skills WHERE id=ANY($1)")
+            .bind(&all)
+            .fetch_all(&mut **tx)
+            .await?
+            .into_iter()
+            .collect();
+    let wajib: Vec<Uuid> = wajib
+        .iter()
+        .copied()
+        .filter(|id| known.contains(id))
+        .collect();
+    let taken: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM occupations WHERE owner_id IS NULL AND lower(nama)=lower($1))",
+    )
+    .bind(nama)
+    .fetch_one(&mut **tx)
+    .await?;
+    if wajib.is_empty() || taken {
+        return Ok(None);
+    }
+    let base: Option<Uuid> = match base_occupation_id {
+        Some(id) => {
+            sqlx::query_scalar("SELECT id FROM occupations WHERE id=$1 AND owner_id IS NULL")
+                .bind(id)
+                .fetch_optional(&mut **tx)
+                .await?
+        }
+        None => None,
+    };
+    let id: Uuid = sqlx::query_scalar("INSERT INTO occupations(id,nama,kode_kbji,bidang,deskripsi,owner_id,base_occupation_id) VALUES($1,$2,NULL,$3,$4,$5,$6) ON CONFLICT(owner_id) WHERE owner_id IS NOT NULL DO UPDATE SET nama=EXCLUDED.nama,bidang=EXCLUDED.bidang,deskripsi=EXCLUDED.deskripsi,base_occupation_id=EXCLUDED.base_occupation_id,updated_at=now() RETURNING id")
+        .bind(Uuid::new_v4()).bind(nama).bind(bidang).bind(deskripsi).bind(user).bind(base)
+        .fetch_one(&mut **tx).await?;
+    sqlx::query("DELETE FROM occupation_skills WHERE occupation_id=$1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    let opsional: Vec<Uuid> = opsional
+        .iter()
+        .copied()
+        .filter(|s| known.contains(s) && !wajib.contains(s))
+        .collect();
+    // Both lists are bound as arrays: one statement, no per-skill roundtrips.
+    sqlx::query("INSERT INTO occupation_skills(occupation_id,skill_id,tipe) SELECT $1,unnest($2::uuid[]),'wajib' UNION ALL SELECT $1,unnest($3::uuid[]),'opsional'")
+        .bind(id)
+        .bind(&wajib)
+        .bind(&opsional)
+        .execute(&mut **tx)
+        .await?;
+    Ok(Some(id))
 }
 
 pub async fn validate_runtime_role(pool: &PgPool, expected: &str) -> Result<(), AppError> {

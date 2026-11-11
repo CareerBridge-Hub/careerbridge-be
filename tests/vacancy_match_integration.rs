@@ -160,7 +160,7 @@ async fn vacancy_page_scores_and_sorts_by_user_skill_match() {
         occupation: String::new(),
         sort: "match".into(),
     };
-    let page = jobs::page(&api, &[f.a], &q).await.unwrap();
+    let page = jobs::page(&api, Uuid::nil(), &[f.a], &q).await.unwrap();
     let items = page["items"].as_array().unwrap();
     let ids: Vec<String> = items
         .iter()
@@ -189,11 +189,11 @@ async fn vacancy_page_scores_and_sorts_by_user_skill_match() {
         .collect();
     assert_eq!(labels, HashSet::from([f.a.to_string(), f.b.to_string()]));
     // No user skills: tagged vacancies score 0, untagged stay null.
-    let none = jobs::page(&api, &[], &q).await.unwrap();
+    let none = jobs::page(&api, Uuid::nil(), &[], &q).await.unwrap();
     assert_eq!(none["items"][0]["matchScore"], 0);
     q.sort = "popular".into();
     assert!(matches!(
-        jobs::page(&api, &[f.a], &q).await,
+        jobs::page(&api, Uuid::nil(), &[f.a], &q).await,
         Err(AppError::Invalid(_))
     ));
     cleanup(&owner, &f).await;

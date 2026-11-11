@@ -1063,7 +1063,13 @@ impl VacancyQuery {
     }
 }
 /// `have` = the caller's catalog skill ids; scores and `sort=match` are computed against it.
-pub async fn page(pool: &PgPool, have: &[Uuid], p: &VacancyQuery) -> Result<Value, AppError> {
+/// `user` scopes RLS so the caller's own occupation is a filter option and resolves to vacancies.
+pub async fn page(
+    pool: &PgPool,
+    user: Uuid,
+    have: &[Uuid],
+    p: &VacancyQuery,
+) -> Result<Value, AppError> {
     let occupation = p.validate()?;
     let pattern = format!(
         "%{}%",
@@ -1076,7 +1082,13 @@ pub async fn page(pool: &PgPool, have: &[Uuid], p: &VacancyQuery) -> Result<Valu
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
         .await?;
-    const FILTER: &str = "($1='' OR v.title ILIKE $2 OR v.company ILIKE $2) AND ($3='' OR lower(v.city)=lower($3)) AND ($4='' OR v.source=$4) AND ($5::uuid IS NULL OR v.occupation_id=$5)";
+    sqlx::query("SELECT set_config('app.user_id',$1,true)")
+        .bind(user.to_string())
+        .execute(&mut *tx)
+        .await?;
+    // Vacancies are imported per catalog occupation. A user's own occupation shows its closest
+    // catalog occupation's vacancies, or, without one, vacancies naming one of its required skills.
+    const FILTER: &str = "($1='' OR v.title ILIKE $2 OR v.company ILIKE $2) AND ($3='' OR lower(v.city)=lower($3)) AND ($4='' OR v.source=$4) AND ($5::uuid IS NULL OR v.occupation_id=$5         OR v.occupation_id=(SELECT c.base_occupation_id FROM occupations c WHERE c.id=$5 AND c.owner_id IS NOT NULL)         OR EXISTS(SELECT 1 FROM occupations c JOIN occupation_skills os ON os.occupation_id=c.id AND os.tipe='wajib' JOIN vacancy_skills vs ON vs.skill_id=os.skill_id WHERE c.id=$5 AND c.owner_id IS NOT NULL AND c.base_occupation_id IS NULL AND vs.vacancy_id=v.id))";
     let total: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT count(*) FROM job_vacancies v WHERE {FILTER}"
     )))
@@ -1091,8 +1103,8 @@ pub async fn page(pool: &PgPool, have: &[Uuid], p: &VacancyQuery) -> Result<Valu
         // ponytail: lateral score per filtered row; precompute per-user scores if active vacancies exceed ~20k.
         .bind(&p.q).bind(&pattern).bind(&p.city).bind(&p.source).bind(occupation).bind(p.limit).bind(p.offset).bind(have).bind(&p.sort).fetch_all(&mut *tx).await?;
     let items: Vec<Value> = rows.iter().map(|r| r.get("data")).collect();
-    // Every catalog occupation is a filter option, even before its first vacancy arrives.
-    let options: Value = sqlx::query_scalar("SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'nama',nama) ORDER BY nama),'[]') FROM occupations")
+    // Every visible occupation is a filter option, even before its first vacancy arrives.
+    let options: Value = sqlx::query_scalar("SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'nama',nama,'custom',owner_id IS NOT NULL) ORDER BY nama),'[]') FROM occupations")
         .fetch_one(&mut *tx).await?;
     tx.commit().await?;
     let skill_ids: Vec<Uuid> = items
@@ -1369,6 +1381,7 @@ mod tests {
         assert_eq!(count, 1);
         let page = page(
             &api,
+            Uuid::nil(),
             &[],
             &VacancyQuery {
                 offset: 0,

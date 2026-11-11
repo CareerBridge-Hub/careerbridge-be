@@ -147,7 +147,10 @@ async fn admin_crud_rls_atomic_import_and_cron_visibility() {
         occupation: String::new(),
         sort: String::new(),
     };
-    assert_eq!(jobs::page(&pool, &[], &query).await.unwrap()["total"], 1);
+    assert_eq!(
+        jobs::page(&pool, Uuid::nil(), &[], &query).await.unwrap()["total"],
+        1
+    );
     assert!(matches!(
         admin::visibility(&pool, ordinary, vacancy, true).await,
         Err(AppError::Forbidden)
@@ -155,7 +158,10 @@ async fn admin_crud_rls_atomic_import_and_cron_visibility() {
     admin::visibility(&pool, actor, vacancy, true)
         .await
         .unwrap();
-    assert_eq!(jobs::page(&pool, &[], &query).await.unwrap()["total"], 0);
+    assert_eq!(
+        jobs::page(&pool, Uuid::nil(), &[], &query).await.unwrap()["total"],
+        0
+    );
     // Cron changes source content/status without overriding moderation.
     let importer = db::connect_runtime_pool(&url, db::RuntimeRole::Importer)
         .await
@@ -165,7 +171,10 @@ async fn admin_crud_rls_atomic_import_and_cron_visibility() {
         .execute(&importer)
         .await
         .unwrap();
-    assert_eq!(jobs::page(&pool, &[], &query).await.unwrap()["total"], 0);
+    assert_eq!(
+        jobs::page(&pool, Uuid::nil(), &[], &query).await.unwrap()["total"],
+        0
+    );
     let hidden = admin::snapshot(&pool, actor).await.unwrap();
     assert!(
         hidden["postings"]
@@ -177,7 +186,10 @@ async fn admin_crud_rls_atomic_import_and_cron_visibility() {
     admin::visibility(&pool, actor, vacancy, false)
         .await
         .unwrap();
-    assert_eq!(jobs::page(&pool, &[], &query).await.unwrap()["total"], 1);
+    assert_eq!(
+        jobs::page(&pool, Uuid::nil(), &[], &query).await.unwrap()["total"],
+        1
+    );
     admin::remove(&pool, actor, "institutions", institution)
         .await
         .unwrap();

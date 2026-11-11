@@ -285,8 +285,14 @@ pub struct SkillsInput {
     #[serde(default)]
     custom_skills: Vec<String>,
     cv_id: Option<Uuid>,
+    /// With `cvId`: save the CV's AI occupation suggestion as the user's own occupation.
+    #[serde(default = "yes")]
+    accept_occupation: bool,
 }
-#[utoipa::path(put, summary = "Replace confirmed skills; server validates CV provenance", path = "/api/v1/me/skills", responses((status = 200, description = "Success", body = OkResponse), (status = 400, description = "Invalid input", body = ErrorResponse),
+fn yes() -> bool {
+    true
+}
+#[utoipa::path(put, summary = "Replace confirmed skills; server validates CV provenance", path = "/api/v1/me/skills", responses((status = 200, description = "Success", body = SkillsSaved), (status = 400, description = "Invalid input", body = ErrorResponse),
     (status = 401, description = "Invalid or expired session", body = ErrorResponse),
     (status = 404, description = "Missing or inaccessible resource", body = ErrorResponse),
     (status = 429, description = "Queue full; retry with backoff", body = ErrorResponse),
@@ -402,9 +408,23 @@ async fn save_skills(
             .execute(&mut *tx)
             .await?;
     }
+    // The suggestion is read from the server-held CV result, never from the request body.
+    let mut occupation_id = None;
+    if input.accept_occupation
+        && let Some(suggestion) = normalized.as_ref().and_then(|n| {
+            serde_json::from_value::<OccupationSuggestion>(n["occupation"].clone()).ok()
+        })
+    {
+        occupation_id = match &suggestion {
+            OccupationSuggestion::Catalog { occupation_id, .. } => Some(*occupation_id),
+            OccupationSuggestion::Custom { .. } => {
+                db::save_owned_occupation(&mut tx, a.sub, &suggestion).await?
+            }
+        };
+    }
     db::bump(&mut tx, a.sub).await?;
     tx.commit().await?;
-    Ok(web::Json(json!({"ok":true})))
+    Ok(web::Json(json!({"ok":true,"occupationId":occupation_id})))
 }
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -601,8 +621,10 @@ async fn training_page(
     .await?;
     // Carry lightweight mutable choices with the existing training request;
     // opening the frontend selector does not require a separate request.
-    let options: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'nama',nama) ORDER BY nama,id),'[]'::jsonb) FROM occupations")
-        .fetch_one(&s.pool).await?;
+    let mut tx = db::active_tx(&s.pool, a.sub).await?;
+    let options: Value = sqlx::query_scalar("SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'nama',nama,'custom',owner_id IS NOT NULL) ORDER BY nama,id),'[]'::jsonb) FROM occupations")
+        .fetch_one(&mut *tx).await?;
+    tx.commit().await?;
     result["occupationOptions"] = options;
     Ok(web::Json(result))
 }
@@ -704,7 +726,7 @@ async fn analysis(
 }
 pub(crate) fn analysis_key(s: &State, revision: i64, catalog_revision: i64) -> String {
     format!(
-        "{revision}:{catalog_revision}:{}:{}:analysis-v8-detailed-guidance",
+        "{revision}:{catalog_revision}:{}:{}:analysis-v9-cv-occupations",
         s.embedding.version(),
         s.llm.model()
     )
@@ -712,7 +734,7 @@ pub(crate) fn analysis_key(s: &State, revision: i64, catalog_revision: i64) -> S
 const EXPLANATION_PROMPT: &str = "You are a practical, encouraging career coach for Indonesian job seekers. Return JSON {\"priorityIndices\":[0,1],\"explanation\":\"...\"}.\n\
 priorityIndices: choose at most 5 indices from missingSkills in the order the learner should address them. Put required skills before optional skills; among required skills, favour those confirmed covered by supplied trainings, then use occupation and skill data to choose a sensible order. Use only supplied indices; return [] when missingSkills is empty.\n\
 explanation: write in Bahasa Indonesia, friendly, direct, and address the reader as \"kamu\". Exactly 3 useful paragraphs separated by a blank line (\\n\\n), 130 to 200 words total. Make the advice specific to the supplied occupation and profile; avoid generic career advice. \\
-Paragraph 1: interpret the match score in plain language for this occupation. Mention the strongest owned skills and their categories when useful. Explain skill sources carefully: manual means the user entered it; cv_alias or cv_semantik means the system matched it from the CV, not that proficiency was independently verified. Quote score, points.earned and points.total. Do not overstate what the score means or imply guaranteed employability. \\
+Paragraph 1: interpret the match score in plain language for this occupation. Mention the strongest owned skills and their categories when useful. Explain skill sources carefully: manual means the user entered it; cv_alias or cv_semantik means the system matched it from the CV, not that proficiency was independently verified. Quote score, points.earned and points.total. Do not overstate what the score means or imply guaranteed employability. When occupationInferredFromCv is true, say in one short clause that this occupation was inferred by the system from the CV and its skill requirements are an estimate, not an official catalog standard. \\
 Paragraph 2: explain the most important gap using the actual missing required and optional skill names. Explain that required skills contribute 2 points and optional skills 1 point; quote points.scoreIfAllRequiredLearned when a required skill is missing. State which required skill to prioritize first and why, based only on supplied data. \\
 Paragraph 3: give an actionable learning sequence using the priority skills and recommend one supplied training only when confirmedMissingSkillsCovered includes the skill. If no training confirms coverage, say which skill to practice first without inventing a course. Explain how progress changes the match only using supplied figures.\n\
 Rules: use only skill names, categories, training names and numbers that appear in the data. Never invent requirements, proficiency, evidence, trainings, companies, salaries, durations, job market claims or percentages. relatedTopics are hints, not proof a training teaches a skill. Plain text only: no markdown, lists, headings or emoji.";
@@ -819,7 +841,7 @@ pub(crate) async fn compute_analysis(s: &State, a: Claims, id: Uuid) -> Result<V
     let mut fallback = true;
     // The LLM receives names and local indices, never user identifiers or database UUIDs.
     let context = json!({
-      "occupation":m.job.nama,"occupationField":m.job.bidang,"occupationDescription":m.job.deskripsi,"score":m.score,
+      "occupation":m.job.nama,"occupationInferredFromCv":m.job.custom,"occupationField":m.job.bidang,"occupationDescription":m.job.deskripsi,"score":m.score,
       "ownedSkills":skills.iter().filter(|s|profile_skill_ids.contains(&s.id)).map(|s|json!({"name":s.nama,"category":s.kategori,"source":profile_skill_sources.get(&s.id).map(String::as_str).unwrap_or("manual")})).collect::<Vec<_>>(),
       "missingSkills":missing.iter().enumerate().map(|(index,s)|json!({"index":index,"name":s.nama,"required":m.missing_wajib.iter().any(|j|j.skill_id==s.id)})).collect::<Vec<_>>(),
       "trainings":ranked.iter().take(10).map(|r|json!({"name":r.training.nama,"retrievalMethod":page["evidence"][r.training.id.to_string()]["method"],"relatedTopics":page["evidence"][r.training.id.to_string()]["relatedSkillIds"].as_array().into_iter().flatten().filter_map(|id|skills.iter().find(|s|Some(s.id.to_string().as_str())==id.as_str()).map(|s|s.nama.as_str())).collect::<Vec<_>>(),"confirmedMissingSkillsCovered":r.covers_wajib.iter().chain(&r.covers_opsional).filter_map(|id|skills.iter().find(|s|s.id==*id).map(|s|s.nama.as_str())).collect::<Vec<_>>()})).collect::<Vec<_>>()
@@ -935,6 +957,6 @@ async fn vacancies(
         .await?;
     tx.commit().await?;
     Ok(web::Json(
-        crate::infrastructure::jobs::page(&s.pool, &have, &p).await?,
+        crate::infrastructure::jobs::page(&s.pool, a.sub, &have, &p).await?,
     ))
 }

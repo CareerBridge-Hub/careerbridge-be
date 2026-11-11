@@ -36,6 +36,8 @@ Updated: 2026-11-01. Checkmarks describe implemented work; live-service and depl
 - [x] Replace background full-catalog downloads with feature-scoped server pagination: login/profile only, dashboard summary, visible job/training pages, direct item/ID lookups, and lazy skill/job search. Rank/filter/page IDs in SQL before hydration, bound analysis output, and apply supporting indexes.
 - [x] Add query cancellation, debounced URL search, offset reset, loading/error/retry states, nullable fee/mode display and bounded metadata caching. Verify live paging/filter/ranking and concurrent cookie refresh. The earlier full background catalog loader is superseded; live read-only browser pagination acceptance passed with login navigation in 1.922 s (one sample). See `docs/PAGINATION.md`.
 
+- [x] Infer one occupation per processed CV with the LLM (closed-set catalog indices, evidence quotes verified against the CV, confidence gate, one validation retry, failure never fails the CV). Catalog matches are reused; new roles are saved on CV confirm as the user's own private occupation (`occupations.owner_id`, RLS-scoped, no KBJI, no job-search quota) that gets scoring, training recommendations, analysis, and vacancies via its closest catalog occupation or required-skill tags. Unit tests cover validation/prompt payload/retries; `tests/user_occupation_integration.rs` covers RLS isolation and vacancy mapping but has not been run (no local database).
+
 ## Security and CI
 
 - [x] Validate JWT signatures/issuer/audience/expiry; enforce per-user RLS and server-validated CV skill provenance.
@@ -62,6 +64,7 @@ Updated: 2026-11-01. Checkmarks describe implemented work; live-service and depl
 - [ ] Run catalog embedding backfill for the newly imported training data against the intended backend configuration and verify persisted model versions/counts.
 - [ ] Review explicit training-to-skill mappings. The import found zero exact matches against the existing skill catalog; semantic embeddings alone do not establish confirmed skill coverage.
 - [x] Update frontend display/filter handling for nullable imported fees and delivery modes with server-side filters; run frontend tests/build.
+- [ ] Apply migration `202611110001_user_occupations.sql`, run `user_occupation_integration` against a disposable database, and evaluate live DeepSeek occupation inference on real CVs.
 - [ ] Evaluate real LLM CV extraction and broader labeled retrieval data; current recorded evaluation uses synthetic fixtures and reports its limitations.
 - [ ] Replace unmaintained `paste` and `ttf-parser` through reviewed upstream migrations when feasible; advisory scans do not prove absence of vulnerabilities or supply-chain attacks.
 

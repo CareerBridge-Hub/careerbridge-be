@@ -106,7 +106,12 @@ fn base(kind: &str) -> Result<(&'static str, &'static str, &'static str), AppErr
         _ => Err(AppError::NotFound),
     }
 }
-pub async fn by_ids(pool: &PgPool, kind: &str, ids: &[Uuid]) -> Result<Vec<Value>, AppError> {
+/// `db` decides visibility: a user transaction also returns that user's own occupation.
+pub async fn by_ids<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    kind: &str,
+    ids: &[Uuid],
+) -> Result<Vec<Value>, AppError> {
     if ids.is_empty() {
         return Ok(vec![]);
     }
@@ -121,7 +126,7 @@ pub async fn by_ids(pool: &PgPool, kind: &str, ids: &[Uuid]) -> Result<Vec<Value
         "{select}{join}{alias}.id=ANY($1) ORDER BY {order}"
     )))
     .bind(ids)
-    .fetch_all(pool)
+    .fetch_all(db)
     .await?;
     let values: Vec<Value> = rows.iter().map(|r| r.get("data")).collect();
     let mut seen = HashSet::new();
@@ -295,12 +300,12 @@ pub async fn catalog(
 }
 pub async fn matches(pool: &PgPool, user: Uuid, q: &Browse) -> Result<Value, AppError> {
     let ids = q.validate()?;
+    // One user transaction: RLS adds the caller's own occupation to the catalog ones.
     let mut tx = db::active_tx(pool, user).await?;
     let have: Vec<Uuid> = sqlx::query_scalar("SELECT skill_id FROM user_skills WHERE user_id=$1")
         .bind(user)
         .fetch_all(&mut *tx)
         .await?;
-    tx.commit().await?;
     let mut query = QueryBuilder::new(
         "WITH weighted AS (SELECT o.id,o.nama,coalesce(round(100.0*sum(CASE WHEN os.skill_id=ANY(",
     );
@@ -321,8 +326,13 @@ pub async fn matches(pool: &PgPool, user: Uuid, q: &Browse) -> Result<Value, App
     }
     query.push(" GROUP BY o.id), filtered AS MATERIALIZED (SELECT * FROM weighted");
     let mut query = finish(query, "score DESC,nama,id", q);
-    let row = query.build().fetch_one(pool).await?;
-    let jobs = by_ids(pool, "occupations", &row.get::<Vec<Uuid>, _>("ids")).await?;
+    let row = query.build().fetch_one(&mut *tx).await?;
+    let jobs = by_ids(&mut *tx, "occupations", &row.get::<Vec<Uuid>, _>("ids")).await?;
+    let fields: Vec<String> =
+        sqlx::query_scalar("SELECT DISTINCT bidang FROM occupations ORDER BY bidang LIMIT 100")
+            .fetch_all(&mut *tx)
+            .await?;
+    tx.commit().await?;
     let have: HashSet<_> = have.into_iter().collect();
     let matches: Vec<JobMatch> = jobs
         .into_iter()
@@ -338,10 +348,6 @@ pub async fn matches(pool: &PgPool, user: Uuid, q: &Browse) -> Result<Value, App
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
-    let fields: Vec<String> =
-        sqlx::query_scalar("SELECT DISTINCT bidang FROM occupations ORDER BY bidang LIMIT 100")
-            .fetch_all(pool)
-            .await?;
     Ok(
         json!({"items":matches,"skills":by_ids(pool,"skills",&skill_ids).await?,"fields":fields,"total":row.get::<i64,_>("total"),"offset":q.offset,"limit":q.limit}),
     )

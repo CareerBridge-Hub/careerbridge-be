@@ -76,7 +76,9 @@ pub async fn snapshot(pool: &PgPool, actor: Uuid) -> Result<Value, AppError> {
         ));
     }
     let skills = values(&mut tx, db::SKILLS_SQL).await?;
-    let jobs = values(&mut tx, db::OCCUPATIONS_SQL).await?;
+    let mut jobs = values(&mut tx, db::OCCUPATIONS_SQL).await?;
+    // An admin's own CV-inferred occupation is personal, not part of the catalog being edited.
+    jobs.retain(|j| j["custom"] != true);
     let institutions = values(&mut tx, db::INSTITUTIONS_SQL).await?;
     let trainings=values(&mut tx,"SELECT jsonb_build_object('id',t.id,'institutionId',t.institution_id,'nama',t.nama,'biaya',t.biaya,'moda',t.moda,'durasi',t.durasi,'urlDaftar',t.url_daftar,'sample',t.sample,'skillIds',coalesce((SELECT jsonb_agg(skill_id ORDER BY skill_id) FROM training_skills WHERE training_id=t.id),'[]')) data FROM trainings t ORDER BY t.nama,t.id").await?;
     let postings=values(&mut tx,"SELECT jsonb_build_object('id',id,'jobRoleId',CASE WHEN title ~* '(devops|devsecops|infraops|site reliability|sre)' THEN 'a9619ac0-8e03-4ddd-bc4f-b31bfb190ec5' WHEN title ~* 'data[ -]?analyst' THEN '96f251a2-ee07-5722-9da1-5a2e83e3361d' ELSE 'a9619ac0-8e03-4ddd-bc4f-b31bfb190ec4' END,'judul',title,'perusahaan',company,'lokasi',city,'url',apply_url,'sumber',source,'tanggal',coalesce(posted_at,last_seen_at),'hidden',hidden,'status',status,'validUntil',valid_until,'lastSeenAt',last_seen_at) data FROM job_vacancies ORDER BY posted_at DESC NULLS LAST,id").await?;
@@ -223,7 +225,13 @@ async fn job(tx: &mut Tx<'_>, v: Value) -> Result<Uuid, AppError> {
         return Err(invalid());
     }
     let id = x.id.unwrap_or_else(Uuid::new_v4);
-    unique_name(tx, "SELECT nama FROM occupations WHERE id!=$1", id, &x.nama).await?;
+    unique_name(
+        tx,
+        "SELECT nama FROM occupations WHERE id!=$1 AND owner_id IS NULL",
+        id,
+        &x.nama,
+    )
+    .await?;
     sqlx::query("INSERT INTO occupations(id,nama,kode_kbji,bidang,deskripsi) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET nama=EXCLUDED.nama,kode_kbji=EXCLUDED.kode_kbji,bidang=EXCLUDED.bidang,deskripsi=EXCLUDED.deskripsi")
         .bind(id).bind(x.nama.trim()).bind(x.kode_kbji).bind(x.bidang.trim()).bind(x.deskripsi.trim()).execute(&mut **tx).await.map_err(db_error)?;
     sqlx::query("DELETE FROM occupation_skills WHERE occupation_id=$1")

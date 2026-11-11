@@ -25,10 +25,14 @@ pub struct JobSkill {
 pub struct Occupation {
     pub id: Uuid,
     pub nama: String,
-    pub kode_kbji: String,
+    /// Null only for a user's AI-inferred occupation; catalog rows always carry KBJI.
+    pub kode_kbji: Option<String>,
     pub bidang: String,
     pub deskripsi: String,
     pub skills: Vec<JobSkill>,
+    /// True when the occupation was inferred from the caller's own CV (visible only to them).
+    #[serde(default)]
+    pub custom: bool,
 }
 #[derive(ToSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,6 +88,140 @@ impl ParsedCv {
                 .iter()
                 .all(|s| s.posisi.len() <= 300 && s.tempat.len() <= 300 && s.periode.len() <= 100)
     }
+}
+/// Occupation the AI inferred from one CV, already validated against the catalogs it was shown.
+#[derive(ToSchema, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum OccupationSuggestion {
+    /// The CV fits an existing catalog occupation; nothing is created.
+    #[serde(rename_all = "camelCase")]
+    Catalog {
+        occupation_id: Uuid,
+        nama: String,
+        evidence: Vec<String>,
+    },
+    /// No catalog occupation is the same role; saved as the user's own occupation on confirm.
+    #[serde(rename_all = "camelCase")]
+    Custom {
+        nama: String,
+        bidang: String,
+        deskripsi: String,
+        /// Closest catalog occupation, whose vacancies are recommended for this role.
+        base_occupation_id: Option<Uuid>,
+        wajib: Vec<Uuid>,
+        opsional: Vec<Uuid>,
+        evidence: Vec<String>,
+    },
+}
+/// Raw provider answer. Indices refer to the catalog lists sent with the prompt.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RawOccupationSuggestion {
+    pub evidence: Vec<String>,
+    pub confidence: String,
+    pub catalog_index: Option<usize>,
+    pub related_index: Option<usize>,
+    pub nama: String,
+    pub bidang: String,
+    pub deskripsi: String,
+    pub wajib: Vec<usize>,
+    pub opsional: Vec<usize>,
+}
+/// Catalog entry offered to the provider; its position in the slice is its prompt index.
+pub struct CatalogOption<'a> {
+    pub id: Uuid,
+    pub nama: &'a str,
+}
+fn clean_text(text: &str, min: usize, max: usize) -> Option<String> {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let len = text.chars().count();
+    (min..=max).contains(&len).then_some(text)
+}
+/// Returns `None` when the answer is unsupported by the CV, low-confidence or malformed.
+/// `cv_terms` are the exact experience titles and skill phrases the provider received.
+pub fn validate_occupation_suggestion(
+    raw: &RawOccupationSuggestion,
+    cv_terms: &[&str],
+    occupations: &[CatalogOption],
+    skills: &[CatalogOption],
+) -> Option<OccupationSuggestion> {
+    if !matches!(raw.confidence.as_str(), "high" | "medium") {
+        return None;
+    }
+    // Every quoted phrase must occur, as whole words, in the CV; one invented quote reveals a guess.
+    let terms: Vec<String> = cv_terms
+        .iter()
+        .map(|t| format!(" {} ", normalize(t)))
+        .collect();
+    let mut seen = HashSet::new();
+    let mut evidence = vec![];
+    for quote in raw.evidence.iter().take(5) {
+        let text = clean_text(quote, 2, 100)?;
+        let key = normalize(&text);
+        if key.is_empty() || !terms.iter().any(|t| t.contains(&format!(" {key} "))) {
+            return None;
+        }
+        if seen.insert(key) {
+            evidence.push(text);
+        }
+    }
+    if evidence.is_empty() {
+        return None;
+    }
+    if let Some(index) = raw.catalog_index {
+        let o = occupations.get(index)?;
+        return Some(OccupationSuggestion::Catalog {
+            occupation_id: o.id,
+            nama: o.nama.to_owned(),
+            evidence,
+        });
+    }
+    let nama = clean_text(&raw.nama, 2, 80)?;
+    if nama.chars().any(char::is_control) || !nama.chars().any(char::is_alphabetic) {
+        return None;
+    }
+    // Same name as a catalog occupation means the provider missed the match; reuse the catalog row.
+    if let Some(o) = occupations
+        .iter()
+        .find(|o| normalize(o.nama) == normalize(&nama))
+    {
+        return Some(OccupationSuggestion::Catalog {
+            occupation_id: o.id,
+            nama: o.nama.to_owned(),
+            evidence,
+        });
+    }
+    let bidang = clean_text(&raw.bidang, 2, 80)?;
+    let deskripsi = clean_text(&raw.deskripsi, 10, 300)?;
+    let base_occupation_id = match raw.related_index {
+        Some(index) => Some(occupations.get(index)?.id),
+        None => None,
+    };
+    let mut picked = HashSet::new();
+    let mut ids = |indices: &[usize], max: usize| -> Option<Vec<Uuid>> {
+        if indices.len() > max {
+            return None;
+        }
+        indices
+            .iter()
+            .map(|i| skills.get(*i).filter(|_| picked.insert(*i)).map(|s| s.id))
+            .collect()
+    };
+    let wajib = ids(&raw.wajib, 8)?;
+    let opsional = ids(&raw.opsional, 10)?;
+    // Two required skills keep the score from being all-or-nothing.
+    if wajib.len() < 2 {
+        return None;
+    }
+    Some(OccupationSuggestion::Custom {
+        nama,
+        bidang,
+        deskripsi,
+        base_occupation_id,
+        wajib,
+        opsional,
+        evidence,
+    })
 }
 #[derive(ToSchema, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -427,7 +565,8 @@ mod tests {
         let job = Occupation {
             id: Uuid::new_v4(),
             nama: "A".into(),
-            kode_kbji: "1234".into(),
+            kode_kbji: Some("1234".into()),
+            custom: false,
             bidang: "B".into(),
             deskripsi: "".into(),
             skills: vec![
@@ -487,7 +626,8 @@ mod tests {
             let job = Occupation {
                 id: Uuid::new_v4(),
                 nama: "Kasus".into(),
-                kode_kbji: "0000".into(),
+                kode_kbji: Some("0000".into()),
+                custom: false,
                 bidang: "Uji".into(),
                 deskripsi: "".into(),
                 skills,
@@ -517,7 +657,8 @@ mod tests {
         let job = Occupation {
             id: Uuid::new_v4(),
             nama: "Software Engineer".into(),
-            kode_kbji: "2512".into(),
+            kode_kbji: Some("2512".into()),
+            custom: false,
             bidang: "TI".into(),
             deskripsi: "".into(),
             skills: vec![req(&git, "wajib"), req(&sql, "wajib"), req(&py, "opsional")],
@@ -598,7 +739,8 @@ mod ranking_tests {
         let job = Occupation {
             id: Uuid::new_v4(),
             nama: "A".into(),
-            kode_kbji: "1234".into(),
+            kode_kbji: Some("1234".into()),
+            custom: false,
             bidang: "B".into(),
             deskripsi: "".into(),
             skills: vec![
@@ -691,4 +833,190 @@ pub enum SkillSource {
 pub enum SkillRequirement {
     Wajib,
     Opsional,
+}
+
+#[cfg(test)]
+mod occupation_suggestion_tests {
+    use super::*;
+    fn id(n: u128) -> Uuid {
+        Uuid::from_u128(n)
+    }
+    fn occupations() -> Vec<CatalogOption<'static>> {
+        vec![
+            CatalogOption {
+                id: id(1),
+                nama: "Web Developer",
+            },
+            CatalogOption {
+                id: id(2),
+                nama: "DevOps Engineer",
+            },
+        ]
+    }
+    fn skills() -> Vec<CatalogOption<'static>> {
+        ["AWS", "Linux", "Terraform", "Docker", "Python"]
+            .iter()
+            .enumerate()
+            .map(|(i, nama)| CatalogOption {
+                id: id(100 + i as u128),
+                nama,
+            })
+            .collect()
+    }
+    const CV: &[&str] = &["Cloud Engineer", "System Administrator", "AWS", "Terraform"];
+    fn cloud() -> RawOccupationSuggestion {
+        RawOccupationSuggestion {
+            evidence: vec!["Cloud Engineer".into(), "AWS".into()],
+            confidence: "high".into(),
+            catalog_index: None,
+            related_index: Some(1),
+            nama: "  Cloud   Engineer ".into(),
+            bidang: "Teknologi Informasi".into(),
+            deskripsi: "Merancang dan mengelola infrastruktur di layanan cloud.".into(),
+            wajib: vec![0, 1, 2],
+            opsional: vec![3],
+        }
+    }
+    fn check(raw: &RawOccupationSuggestion) -> Option<OccupationSuggestion> {
+        validate_occupation_suggestion(raw, CV, &occupations(), &skills())
+    }
+
+    #[test]
+    fn new_role_becomes_custom_with_catalog_ids() {
+        assert_eq!(
+            check(&cloud()),
+            Some(OccupationSuggestion::Custom {
+                nama: "Cloud Engineer".into(),
+                bidang: "Teknologi Informasi".into(),
+                deskripsi: "Merancang dan mengelola infrastruktur di layanan cloud.".into(),
+                base_occupation_id: Some(id(2)),
+                wajib: vec![id(100), id(101), id(102)],
+                opsional: vec![id(103)],
+                evidence: vec!["Cloud Engineer".into(), "AWS".into()],
+            })
+        );
+    }
+
+    #[test]
+    fn catalog_match_by_index_or_by_name_reuses_catalog_row() {
+        let by_index = RawOccupationSuggestion {
+            catalog_index: Some(0),
+            ..cloud()
+        };
+        let by_name = RawOccupationSuggestion {
+            nama: "devops engineer".into(),
+            ..cloud()
+        };
+        assert!(
+            matches!(check(&by_index), Some(OccupationSuggestion::Catalog { occupation_id, .. }) if occupation_id == id(1))
+        );
+        assert!(
+            matches!(check(&by_name), Some(OccupationSuggestion::Catalog { occupation_id, nama, .. }) if occupation_id == id(2) && nama == "DevOps Engineer")
+        );
+    }
+
+    #[test]
+    fn rejects_low_confidence_and_unsupported_evidence() {
+        for confidence in ["low", "", "HIGH"] {
+            let raw = RawOccupationSuggestion {
+                confidence: confidence.into(),
+                ..cloud()
+            };
+            assert_eq!(check(&raw), None, "confidence {confidence:?}");
+        }
+        for evidence in [
+            vec![],
+            vec!["Kubernetes".into()],
+            // One invented quote invalidates the answer even next to a real one.
+            vec!["AWS".into(), "Google Cloud Architect".into()],
+            // Whole words only: "Engine" is not quoted from "Cloud Engineer".
+            vec!["Engine".into()],
+        ] {
+            let raw = RawOccupationSuggestion {
+                evidence: evidence.clone(),
+                ..cloud()
+            };
+            assert_eq!(check(&raw), None, "evidence {evidence:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_out_of_range_duplicate_or_too_few_skills() {
+        for (wajib, opsional) in [
+            (vec![0, 9], vec![]),
+            (vec![0, 1], vec![1]),
+            (vec![0, 0], vec![]),
+            (vec![0], vec![1, 2]),
+            (vec![0, 1, 2, 3, 4, 0, 1, 2, 3], vec![]),
+        ] {
+            let raw = RawOccupationSuggestion {
+                wajib: wajib.clone(),
+                opsional: opsional.clone(),
+                ..cloud()
+            };
+            assert_eq!(check(&raw), None, "wajib {wajib:?} opsional {opsional:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_bad_indices_and_text() {
+        let cases = [
+            RawOccupationSuggestion {
+                catalog_index: Some(5),
+                ..cloud()
+            },
+            RawOccupationSuggestion {
+                related_index: Some(5),
+                ..cloud()
+            },
+            RawOccupationSuggestion {
+                nama: "x".into(),
+                ..cloud()
+            },
+            RawOccupationSuggestion {
+                nama: "1234".into(),
+                ..cloud()
+            },
+            RawOccupationSuggestion {
+                nama: "a".repeat(81),
+                ..cloud()
+            },
+            RawOccupationSuggestion {
+                bidang: "".into(),
+                ..cloud()
+            },
+            RawOccupationSuggestion {
+                deskripsi: "Cloud".into(),
+                ..cloud()
+            },
+        ];
+        for raw in cases {
+            assert_eq!(check(&raw), None, "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn related_occupation_is_optional_and_suggestion_round_trips_as_json() {
+        let raw = RawOccupationSuggestion {
+            related_index: None,
+            ..cloud()
+        };
+        let suggestion = check(&raw).unwrap();
+        let json = serde_json::to_value(&suggestion).unwrap();
+        assert_eq!(json["kind"], "custom");
+        assert_eq!(json["baseOccupationId"], serde_json::Value::Null);
+        assert_eq!(
+            serde_json::from_value::<OccupationSuggestion>(json).unwrap(),
+            suggestion
+        );
+        // Provider fields arrive camelCase; unknown or missing fields default safely.
+        let parsed: RawOccupationSuggestion = serde_json::from_value(serde_json::json!({
+            "evidence": ["AWS"], "confidence": "medium", "catalogIndex": 1, "extra": true
+        }))
+        .unwrap();
+        assert_eq!(parsed.catalog_index, Some(1));
+        assert!(
+            matches!(check(&parsed), Some(OccupationSuggestion::Catalog { occupation_id, .. }) if occupation_id == id(2))
+        );
+    }
 }

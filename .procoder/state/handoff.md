@@ -1,16 +1,20 @@
 # procoder handoff
 
 <!-- procoder:facts -->
-generated: 2026-11-09T14:50:49Z
-branch: proposal-stage-login-cv — 6 ahead, 0 behind main
-head: e8e55c5
-dirty files: 13
+generated: 2026-11-11T14:05:00Z
+branch: main — this is the default branch
+head: 434d7b3
+dirty files: 15
 sprint: none — no backlog yet (`procoder backlog` starts one)
 open tasks: none
 unlearned lessons: none — no ledger at .procoder/github/LESSONS.md
 gate defers to CI: rust suite(s) — the gate runs go, python
 index: none — `procoder index build` has not run here
 <!-- /procoder:facts -->
+
+
+
+
 
 
 

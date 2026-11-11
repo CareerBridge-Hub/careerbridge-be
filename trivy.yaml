@@ -1,4 +1,5 @@
 # Repository scans do not build images or require production credentials.
+# Secrets are scanned in a separate CI step at every severity: a leaked JWT or webhook is rated MEDIUM.
 timeout: 10m
 exit-code: 1
 severity:
@@ -8,7 +9,6 @@ scan:
   scanners:
     - vuln
     - misconfig
-    - secret
   skip-dirs:
     - .git
     - target

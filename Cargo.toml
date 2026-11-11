@@ -7,7 +7,7 @@ default-run = "careerbridge-be"
 [dependencies]
 actix-web = { version = "4", default-features = false, features = ["macros", "cookies"] }
 actix-cors = "0.7"
-actix-multipart = "0.7"
+actix-multipart = "0.8"
 aes-gcm = "0.10"
 async-trait = "0.1"
 base64 = "0.22"

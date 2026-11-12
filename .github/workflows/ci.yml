@@ -75,12 +75,14 @@ jobs:
       SUPABASE_DB_URL: postgresql://postgres:ci-disposable-only@127.0.0.1:5432/careerbridge_test
       TEST_DATABASE_URL: postgresql://postgres:ci-disposable-only@127.0.0.1:5432/careerbridge_test
       CARGO_BUILD_JOBS: 2
+      # Fail loudly instead of falling back to cmake, which the runner does not have.
+      AWS_LC_SYS_CMAKE_BUILDER: 0
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Install native build prerequisites and PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install --yes cmake pkg-config postgresql-client
+      # No apt-get: Ubuntu mirrors on runners fail DNS intermittently. aws-lc-sys builds
+      # with its cc builder on x86_64 Linux (no cmake), and psql runs in the service container.
       - name: Install Rust toolchain
         run: rustup update stable --no-self-update
       - name: Cache Rust build artifacts
@@ -89,7 +91,7 @@ jobs:
         run: cargo test --locked
       - name: Bootstrap disposable database and apply migrations
         run: |
-          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/bootstrap.sql
+          docker exec -i "${{ job.services.postgres.id }}" psql -U postgres -d careerbridge_test -v ON_ERROR_STOP=1 < tests/bootstrap.sql
           cargo run --locked --bin migrate
       - name: Verify cross-user isolation and restricted database roles
         run: |

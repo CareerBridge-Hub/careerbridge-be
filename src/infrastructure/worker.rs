@@ -324,11 +324,14 @@ async fn extract_fields(
         );
         // Transport retries already happen in the provider adapter.
         let value = llm.json(instruction, json!({"cv":redacted})).await?;
-        if let Ok(cv) = serde_json::from_value::<ParsedCv>(value)
-            && cv.validate()
-        {
+        if let Some(cv) = ParsedCv::from_provider(&value) {
             return Ok(cv);
         }
+        tracing::warn!(
+            stage = "llm_extraction",
+            validation_attempt = attempt + 1,
+            "AI answer is not CV-shaped"
+        );
     }
     Err(AppError::Invalid("Hasil AI tidak valid. Coba lagi."))
 }

@@ -74,19 +74,57 @@ pub struct ParsedCv {
     pub skills: Vec<String>,
 }
 impl ParsedCv {
-    pub fn validate(&self) -> bool {
-        self.skills.len() <= 100
-            && self.pendidikan.len() <= 20
-            && self.pengalaman.len() <= 30
-            && self
-                .skills
+    /// Bounds an untrusted provider answer. One off-shape item (a null period, an empty or
+    /// oversized skill, an education object, items past a cap) is dropped instead of failing
+    /// the whole CV: at temperature 0 the retry repeats the same answer. None = not CV-shaped.
+    pub fn from_provider(value: &serde_json::Value) -> Option<Self> {
+        use serde_json::Value;
+        let text = |v: &Value| match v {
+            Value::String(s) => s.trim().to_owned(),
+            Value::Object(m) => m
+                .values()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(", "),
+            _ => String::new(),
+        };
+        let list = |key: &str| value.get(key).and_then(Value::as_array);
+        if list("pendidikan").is_none() && list("pengalaman").is_none() && list("skills").is_none()
+        {
+            return None;
+        }
+        let items = |key: &str| list(key).map(Vec::as_slice).unwrap_or_default();
+        Some(Self {
+            pendidikan: items("pendidikan")
                 .iter()
-                .all(|s| !s.trim().is_empty() && s.chars().count() <= 100)
-            && self.pendidikan.iter().all(|s| s.len() <= 1000)
-            && self
-                .pengalaman
+                .map(text)
+                .filter(|s| !s.is_empty() && s.len() <= 1000)
+                .take(20)
+                .collect(),
+            pengalaman: items("pengalaman")
                 .iter()
-                .all(|s| s.posisi.len() <= 300 && s.tempat.len() <= 300 && s.periode.len() <= 100)
+                .map(|e| Experience {
+                    posisi: text(&e["posisi"]),
+                    tempat: text(&e["tempat"]),
+                    periode: text(&e["periode"]),
+                })
+                .filter(|e| {
+                    !e.posisi.is_empty()
+                        && e.posisi.len() <= 300
+                        && e.tempat.len() <= 300
+                        && e.periode.len() <= 100
+                })
+                .take(30)
+                .collect(),
+            skills: items("skills")
+                .iter()
+                .map(text)
+                .filter(|s| !s.is_empty() && s.chars().count() <= 100)
+                .take(100)
+                .collect(),
+        })
     }
 }
 /// Occupation the AI inferred from one CV, already validated against the catalogs it was shown.
@@ -779,12 +817,33 @@ mod ranking_tests {
         );
     }
     #[test]
-    fn rejects_oversized_extraction_without_panicking() {
-        let cv = ParsedCv {
-            skills: vec!["a".repeat(101)],
-            ..Default::default()
-        };
-        assert!(!cv.validate());
+    fn provider_cv_drops_bad_items_instead_of_failing() {
+        let many: Vec<String> = (0..130).map(|i| format!("Skill {i}")).collect();
+        let cv = ParsedCv::from_provider(&serde_json::json!({
+            "pendidikan": ["SMK Tata Boga", {"institusi": "Universitas Contoh", "jurusan": "Manajemen"}, null],
+            "pengalaman": [
+                {"posisi": "Kasir", "tempat": null, "periode": null},
+                {"posisi": "", "tempat": "PT Contoh", "periode": "2020"},
+                {"posisi": "x".repeat(301), "tempat": "", "periode": ""}
+            ],
+            "skills": [["nested"], "", "a".repeat(101), " Memasak ", many]
+        }))
+        .unwrap();
+        assert_eq!(cv.pendidikan.len(), 2);
+        assert!(cv.pendidikan[1].contains("Universitas Contoh"));
+        assert_eq!(cv.pengalaman.len(), 1);
+        assert_eq!(
+            (
+                cv.pengalaman[0].tempat.as_str(),
+                cv.pengalaman[0].periode.as_str()
+            ),
+            ("", "")
+        );
+        assert_eq!(cv.skills, vec!["Memasak"]);
+        let capped = ParsedCv::from_provider(&serde_json::json!({ "skills": many })).unwrap();
+        assert_eq!(capped.skills.len(), 100);
+        assert!(ParsedCv::from_provider(&serde_json::json!({"cv": {}})).is_none());
+        assert!(ParsedCv::from_provider(&serde_json::json!(["Memasak"])).is_none());
     }
     #[test]
     fn alias_lookup_uses_canonical_and_alias_names() {

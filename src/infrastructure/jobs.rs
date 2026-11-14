@@ -362,9 +362,13 @@ pub struct SearchQuery {
     pub keyword: String,
     pub title_pattern: Option<String>,
 }
-/// Round-robin: the queries that waited longest go first; never-run rows lead.
+/// Queue order, shared with the per-source keyword batch in `extract::jobs::collect`:
+/// occupations users want (`demand`) that were not searched in the last 2 hours go first, then
+/// plain round-robin (waited longest first, never-run rows lead). The 2-hour gate keeps demanded
+/// rows from starving the rest of the catalog when they outnumber one batch.
+// ponytail: fixed 2h gate = default JOB_SCRAPE_INTERVAL_SECONDS; bind it from Settings if the interval changes a lot.
 pub async fn next_queries(pool: &PgPool, limit: i64) -> Result<Vec<SearchQuery>, AppError> {
-    Ok(sqlx::query_as("SELECT id,occupation_id,keyword,title_pattern FROM job_search_queries WHERE enabled ORDER BY last_run_at NULLS FIRST,keyword LIMIT $1")
+    Ok(sqlx::query_as("SELECT id,occupation_id,keyword,title_pattern FROM job_search_queries WHERE enabled ORDER BY (demand>0 AND (last_run_at IS NULL OR last_run_at<now()-interval '2 hours')) DESC,last_run_at NULLS FIRST,demand DESC,keyword LIMIT $1")
         .bind(limit).fetch_all(pool).await?)
 }
 #[derive(Clone)]
@@ -1247,6 +1251,14 @@ pub async fn retag_all(pool: &PgPool) -> Result<u64, AppError> {
     Ok(rows.len() as u64)
 }
 pub async fn run_pass(pool: &PgPool, settings: &Settings, force: bool) -> bool {
+    // Rank keywords by what users currently want; a stale ranking only changes order.
+    // ponytail: aggregates all users every tick; cheap below ~100k users, else refresh only when a source is due.
+    if let Err(error) = sqlx::query("SELECT public.refresh_search_demand()")
+        .execute(pool)
+        .await
+    {
+        tracing::warn!(error=%error, "search demand refresh failed; previous ranking kept");
+    }
     let keys: Vec<&str> = settings.sources.iter().map(|s| s.key).collect();
     if sqlx::query(
         "UPDATE job_sources SET managed_by='rust' WHERE key=ANY($1) AND managed_by<>'rust'",
@@ -1272,16 +1284,32 @@ pub async fn run_pass(pool: &PgPool, settings: &Settings, force: bool) -> bool {
     }
     success
 }
+/// Wakes the in-process scheduler early (admin "scrape now"). A separate `job-import --daemon`
+/// process is not woken; it sees the due sources on its next 60-second tick.
+static WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
+static SCHEDULER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn wake() {
+    WAKE.notify_one();
+}
+/// Whether this process runs the vacancy scheduler (`JOB_SCRAPE_ENABLED=true`).
+pub fn scheduler_active() -> bool {
+    SCHEDULER.load(std::sync::atomic::Ordering::Relaxed)
+}
 pub async fn schedule(pool: PgPool, settings: Settings) {
     let mut ticker = tokio::time::interval(Duration::from_secs(60));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
-        ticker.tick().await;
+        // Sources stay sequential either way: a wake-up never runs two passes at once.
+        tokio::select! {
+            _ = ticker.tick() => {}
+            _ = WAKE.notified() => {}
+        }
         run_pass(&pool, &settings, false).await;
     }
 }
 pub async fn start(database_url: &str, settings: Settings) -> Result<(), AppError> {
     if settings.enabled {
+        SCHEDULER.store(true, std::sync::atomic::Ordering::Relaxed);
         let pool = db::connect_runtime_pool(database_url, db::RuntimeRole::Importer).await?;
         tokio::spawn(schedule(pool, settings));
     }

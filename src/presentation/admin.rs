@@ -17,6 +17,7 @@ pub fn configure(c: &mut web::ServiceConfig) {
                     }),
             )
             .route("/catalog", web::get().to(catalog))
+            .route("/vacancies/scrape", web::post().to(scrape))
             .route("/vacancies/{id}/visibility", web::patch().to(visibility))
             .route("/{kind}/import", web::post().to(import))
             .route("/{kind}", web::post().to(save))
@@ -76,4 +77,8 @@ pub async fn visibility(
 ) -> Result<HttpResponse, AppError> {
     admin::visibility(&s.pool, a.sub, *id, body.hidden).await?;
     Ok(HttpResponse::Ok().json(json!({"ok":true})))
+}
+#[utoipa::path(post,path="/api/v1/admin/vacancies/scrape",tag="Admin",security(("cookieAuth"=[])),responses((status=200,description="Queued non-metered sources (running or recently run/requested ones are skipped), keywords prioritized by user demand, and whether this process runs the scheduler",body=Value),(status=403,description="Active administrator required")))]
+pub async fn scrape(s: web::Data<State>, a: Claims) -> Result<HttpResponse, AppError> {
+    Ok(HttpResponse::Ok().json(admin::scrape_now(&s.pool, a.sub).await?))
 }

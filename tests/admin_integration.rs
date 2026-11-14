@@ -251,3 +251,144 @@ async fn admin_crud_rls_atomic_import_and_cron_visibility() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+#[ignore = "requires a disposable migrated TEST_DATABASE_URL"]
+async fn scrape_now_queues_sources_and_searches_wanted_occupations_first() {
+    let url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL required");
+    let owner = PgPool::connect(&url).await.unwrap();
+    let name: String = sqlx::query_scalar("SELECT current_database()")
+        .fetch_one(&owner)
+        .await
+        .unwrap();
+    assert!(name.contains("_test"), "disposable test database required");
+    let pool = db::connect_runtime_pool(&url, db::RuntimeRole::Api)
+        .await
+        .unwrap();
+    let importer = db::connect_runtime_pool(&url, db::RuntimeRole::Importer)
+        .await
+        .unwrap();
+    // The alphabetically last keyword: plain round-robin would search it last.
+    let (wanted_query, wanted): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT id,occupation_id FROM job_search_queries WHERE enabled ORDER BY keyword DESC LIMIT 1",
+    )
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    let saved_runs: Vec<(Uuid, Option<chrono::DateTime<chrono::Utc>>)> =
+        sqlx::query_as("SELECT id,last_run_at FROM job_search_queries")
+            .fetch_all(&owner)
+            .await
+            .unwrap();
+    let admin_id = Uuid::new_v4();
+    let seeker = Uuid::new_v4();
+    for (id, role) in [(admin_id, 2_i16), (seeker, 1_i16)] {
+        sqlx::query("INSERT INTO auth.users(id) VALUES($1)")
+            .bind(id)
+            .execute(&owner)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO users(id,role_id,nama,pendidikan,jurusan,province_id,kota,persetujuan_cv_at,target_occupation_id) VALUES($1,$2,'Scrape fixture','S1','TI',1,'Test',now(),$3)")
+            .bind(id).bind(role).bind((role == 1).then_some(wanted)).execute(&owner).await.unwrap();
+    }
+    sqlx::query("UPDATE job_search_queries SET last_run_at=NULL")
+        .execute(&owner)
+        .await
+        .unwrap();
+    // The importer can refresh demand without reading users itself.
+    sqlx::query("SELECT public.refresh_search_demand()")
+        .execute(&importer)
+        .await
+        .unwrap();
+    assert_eq!(
+        jobs::next_queries(&importer, 1).await.unwrap()[0].id,
+        wanted_query
+    );
+    // Searched in the last 2 hours: the rest of the catalog gets the slot (no starvation).
+    sqlx::query("UPDATE job_search_queries SET last_run_at=now() WHERE id=$1")
+        .bind(wanted_query)
+        .execute(&owner)
+        .await
+        .unwrap();
+    assert_ne!(
+        jobs::next_queries(&importer, 1).await.unwrap()[0].id,
+        wanted_query
+    );
+
+    let saved_sources: Vec<(String, String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT key,managed_by,next_run_at FROM job_sources WHERE key IN ('grab','openwebninja')",
+    )
+    .fetch_all(&owner)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE job_sources SET managed_by='rust',next_run_at=now()+interval '1 day',lease_until=NULL,run_id=NULL,requested_at=NULL,last_success_at=NULL WHERE key IN ('grab','openwebninja')")
+        .execute(&owner)
+        .await
+        .unwrap();
+    assert!(matches!(
+        admin::scrape_now(&pool, seeker).await,
+        Err(AppError::Forbidden)
+    ));
+    let result = admin::scrape_now(&pool, admin_id).await.unwrap();
+    let queued: Vec<&str> = result["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(queued.contains(&"grab"));
+    assert!(!queued.contains(&"openwebninja"), "metered quota untouched");
+    assert!(
+        result["priorities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["demand"].as_i64() >= Some(1))
+    );
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT next_run_at<=now() FROM job_sources WHERE key='grab'"
+        )
+        .fetch_one(&owner)
+        .await
+        .unwrap()
+    );
+    // A second click within the cooldown queues nothing again.
+    let again = admin::scrape_now(&pool, admin_id).await.unwrap();
+    assert!(
+        !again["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "grab")
+    );
+
+    for (key, managed_by, next_run_at) in saved_sources {
+        sqlx::query(
+            "UPDATE job_sources SET managed_by=$2,next_run_at=$3,requested_at=NULL WHERE key=$1",
+        )
+        .bind(key)
+        .bind(managed_by)
+        .bind(next_run_at)
+        .execute(&owner)
+        .await
+        .unwrap();
+    }
+    let (ids, runs): (Vec<Uuid>, Vec<Option<chrono::DateTime<chrono::Utc>>>) =
+        saved_runs.into_iter().unzip();
+    sqlx::query("UPDATE job_search_queries q SET last_run_at=s.t FROM unnest($1::uuid[],$2::timestamptz[]) s(id,t) WHERE q.id=s.id")
+        .bind(ids)
+        .bind(runs)
+        .execute(&owner)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM auth.users WHERE id=ANY($1)")
+        .bind(vec![admin_id, seeker])
+        .execute(&owner)
+        .await
+        .unwrap();
+    sqlx::query("SELECT public.refresh_search_demand()")
+        .execute(&owner)
+        .await
+        .unwrap();
+}

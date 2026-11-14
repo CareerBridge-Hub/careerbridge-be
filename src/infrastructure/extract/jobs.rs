@@ -1019,7 +1019,8 @@ pub async fn collect(
     let batch: Vec<SearchQuery> = if board {
         vec![]
     } else {
-        sqlx::query_as("SELECT q.id,q.occupation_id,q.keyword,q.title_pattern FROM job_search_queries q LEFT JOIN extract_query_runs r ON r.query_id=q.id AND r.source=$1 WHERE q.enabled ORDER BY r.last_run_at NULLS FIRST,q.keyword LIMIT 20").bind(source.key).fetch_all(pool).await?
+        // Same demand-first order as jobs::next_queries, against this source's own last run.
+        sqlx::query_as("SELECT q.id,q.occupation_id,q.keyword,q.title_pattern FROM job_search_queries q LEFT JOIN extract_query_runs r ON r.query_id=q.id AND r.source=$1 WHERE q.enabled ORDER BY (q.demand>0 AND (r.last_run_at IS NULL OR r.last_run_at<now()-interval '2 hours')) DESC,r.last_run_at NULLS FIRST,q.demand DESC,q.keyword LIMIT 20").bind(source.key).fetch_all(pool).await?
     };
     let terms: Vec<Option<&SearchQuery>> = if board {
         vec![None]

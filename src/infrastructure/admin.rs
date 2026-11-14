@@ -425,6 +425,33 @@ pub async fn visibility(
     tx.commit().await?;
     Ok(())
 }
+/// Admin "scrape now": makes every scheduler-managed, non-metered vacancy source due and wakes
+/// the importer. Keyword sources then search the occupations users want first (see
+/// `jobs::next_queries`). Metered feeds keep their daily quota. Sources that are running, finished
+/// or were requested in the last 10 minutes are skipped, so repeated clicks add no load.
+pub async fn scrape_now(pool: &PgPool, actor: Uuid) -> Result<Value, AppError> {
+    let metered: Vec<&str> = super::jobs::SOURCES
+        .iter()
+        .filter(|s| s.metered())
+        .map(|s| s.key)
+        .collect();
+    let mut tx = authorized(pool, actor).await?;
+    let sources: Vec<String> = sqlx::query_scalar("UPDATE job_sources SET next_run_at=now(),requested_at=now() WHERE managed_by='rust' AND key<>ALL($1) AND (lease_until IS NULL OR lease_until<now()) AND (requested_at IS NULL OR requested_at<now()-interval '10 minutes') AND (last_success_at IS NULL OR last_success_at<now()-interval '10 minutes') RETURNING key")
+        .bind(&metered)
+        .fetch_all(&mut *tx)
+        .await?;
+    let priorities: Value = sqlx::query_scalar("SELECT public.refresh_search_demand()")
+        .fetch_one(&mut *tx)
+        .await?;
+    audit(&mut tx, actor, "vacancies", "scrape", &[]).await?;
+    tx.commit().await?;
+    super::jobs::wake();
+    Ok(json!({
+        "sources": sources,
+        "priorities": priorities,
+        "schedulerActive": super::jobs::scheduler_active(),
+    }))
+}
 
 #[cfg(test)]
 mod tests {

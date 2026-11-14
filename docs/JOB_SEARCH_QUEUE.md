@@ -33,6 +33,12 @@ Ciri penting:
 - **Kategori baru otomatis masuk antrian.** Trigger `queue_search` pada `occupations` menambah keyword default `"<nama kecil> jobs in Jakarta"` untuk setiap occupation baru.
 - **Tanpa duplikat.** Lowongan diidentifikasi dengan docid Google (`job_uid`), jadi lowongan yang ditemukan dua keyword hanya tersimpan sekali.
 
+### Prioritas permintaan pengguna & tombol admin
+
+- Kolom `job_search_queries.demand` = jumlah pengguna aktif yang menargetkan occupation itu (target, atau occupation AI miliknya lewat `base_occupation_id`). Dihitung ulang tiap pass importer oleh `public.refresh_search_demand()` (SECURITY DEFINER, hanya agregat).
+- Urutan antrian: keyword dengan `demand>0` yang belum dicari 2 jam terakhir didahulukan, sisanya round-robin biasa. Gate 2 jam mencegah kategori lain kelaparan.
+- Admin **Lowongan → "Cari lowongan sekarang"** (`POST /api/v1/admin/vacancies/scrape`) membuat semua sumber non-metered (`managed_by='rust'`) jatuh tempo sekarang dan membangunkan scheduler. Sumber yang sedang jalan, baru sukses, atau diminta < 10 menit lalu dilewati (`job_sources.requested_at`). `openwebninja` tidak ikut (kuota). Sumber tetap dijalankan berurutan, bukan paralel.
+
 ## 2. Komponen
 
 | Bagian | Lokasi |

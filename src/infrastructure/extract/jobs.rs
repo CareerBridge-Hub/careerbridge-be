@@ -183,9 +183,10 @@ pub fn keyword(raw: &str) -> String {
         .join(" ")
         .to_lowercase()
 }
-struct Classifier(Vec<(Uuid, Uuid, bool, Option<Regex>)>);
+/// Maps vacancy titles to occupations through the search queue's title patterns.
+pub struct Classifier(Vec<(Uuid, Uuid, bool, Option<Regex>)>);
 impl Classifier {
-    fn new(queries: &[SearchQuery]) -> Self {
+    pub fn new(queries: &[SearchQuery]) -> Self {
         Self(
             queries
                 .iter()
@@ -200,24 +201,28 @@ impl Classifier {
                 .collect(),
         )
     }
-    fn occupation(&self, title: &str, preferred: Option<Uuid>) -> Option<Uuid> {
-        if let Some((_, occupation, _, _)) = self.0.iter().find(|(id, _, unfiltered, regex)| {
-            Some(*id) == preferred
-                && (*unfiltered || regex.as_ref().is_some_and(|r| r.is_match(title)))
-        }) {
+    pub fn occupation(&self, title: &str, preferred: Option<Uuid>) -> Option<Uuid> {
+        // A query without a pattern accepts every title it finds.
+        if let Some((_, occupation, _, _)) = self
+            .0
+            .iter()
+            .find(|(id, _, unfiltered, _)| Some(*id) == preferred && *unfiltered)
+        {
             return Some(*occupation);
         }
+        // The longest match wins, so "Asisten Apoteker" found by the "apoteker" query is still
+        // Asisten Apoteker; the query that found the title only breaks ties.
         self.0
             .iter()
-            .filter_map(|(_, occupation, _, regex)| {
+            .filter_map(|(id, occupation, _, regex)| {
                 let n = regex
                     .as_ref()?
                     .find_iter(title)
                     .map(|m| m.len())
                     .sum::<usize>();
-                (n > 0).then_some((*occupation, n))
+                (n > 0).then_some((*occupation, (n, Some(*id) == preferred)))
             })
-            .max_by_key(|(_, n)| *n)
+            .max_by_key(|(_, rank)| *rank)
             .map(|(id, _)| id)
     }
 }

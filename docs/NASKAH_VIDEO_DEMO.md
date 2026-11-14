@@ -130,7 +130,7 @@ Kerjakan ini dulu supaya rekaman tidak terputus di tengah jalan.
 
 **Layar:** Buka menu **Lowongan**. Tunjukkan filter kota (ketik "Jakarta"), lalu ubah urutan ke **Paling cocok**. Buka satu lowongan untuk melihat detail dan tombol **Lamar**.
 
-> Terakhir, halaman Lowongan. Ini lowongan kerja asli di Indonesia, diambil otomatis dari halaman karier perusahaan setiap 6 jam dan dari Google Jobs setiap hari. Lowongan yang sudah ditutup atau terlalu lama tidak diperbarui tidak akan ditampilkan.
+> Terakhir, halaman Lowongan. Ini lowongan kerja asli di Indonesia, diambil otomatis dari situs lowongan dan halaman karier perusahaan setiap 2 jam dan dari Google Jobs setiap hari. Lowongan yang sudah ditutup atau terlalu lama tidak diperbarui tidak akan ditampilkan.
 >
 > Lowongan bisa diurutkan berdasarkan yang paling cocok dengan skill pengguna. Kalau tertarik, pengguna klik Lamar dan langsung diarahkan ke situs sumber aslinya. CareerBridge tidak menampung lamaran, jadi pengguna melamar langsung ke perusahaannya.
 

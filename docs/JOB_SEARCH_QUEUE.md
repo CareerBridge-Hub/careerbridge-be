@@ -2,7 +2,7 @@
 
 Worker harian yang mengisi halaman **Lowongan** dengan lowongan di Indonesia untuk **setiap kategori pekerjaan** di katalog (tabel `occupations`). Sumbernya Google for Jobs lewat API OpenWeb Ninja (`source = openwebninja`).
 
-Sumber lain (Grab, Cermati, DKatalis, SoftwareSeni, Kredivo) tetap berjalan seperti biasa tiap 6 jam dan tidak memakai kuota API.
+Sumber lain (situs lowongan seperti LinkedIn, JobStreet, Glints, Kalibrr, KitaLulus, serta feed perusahaan) berjalan tiap 2 jam (`JOB_SCRAPE_INTERVAL_SECONDS=7200`) untuk semua bidang pekerjaan dan tidak memakai kuota API. Feed perusahaan tidak lagi dibatasi lowongan IT: judul diklasifikasikan ke occupation katalog lewat `title_pattern` antrian pencarian; judul yang tidak cocok dengan occupation mana pun dilewati.
 
 ---
 
@@ -114,8 +114,8 @@ Kalau keyword ditambah sampai rumus itu tidak terpenuhi, naikkan `PER_RUN` dan u
 
 ```env
 JOB_SCRAPE_ENABLED=true
-JOB_SCRAPE_INTERVAL_SECONDS=21600
-JOB_SCRAPE_SOURCES=grab,cermati,dkatalis,softwareseni,kredivo,openwebninja
+JOB_SCRAPE_INTERVAL_SECONDS=7200
+# JOB_SCRAPE_SOURCES dikosongkan: semua sumber produksi + openwebninja (selama key terisi)
 OPENWEBNINJA_API_KEY=<API key dari dashboard OpenWeb Ninja>
 OPENWEBNINJA_QUERIES_PER_RUN=2
 ```
@@ -169,7 +169,7 @@ Pilih **salah satu**. Keduanya aman berjalan bersamaan karena ada lease di DB, t
   cargo run --bin job-import -- --daemon
   ```
 
-Run pertama langsung jalan; berikutnya tiap 24 jam untuk `openwebninja`, tiap 6 jam untuk feed perusahaan. Jadwal tersimpan di `job_sources.next_run_at`, jadi tetap berlanjut setelah restart.
+Run pertama langsung jalan; berikutnya tiap 24 jam untuk `openwebninja`, tiap 2 jam untuk semua sumber lain. Jadwal tersimpan di `job_sources.next_run_at`, jadi tetap berlanjut setelah restart.
 
 ## 6. Perintah CLI `job-import`
 

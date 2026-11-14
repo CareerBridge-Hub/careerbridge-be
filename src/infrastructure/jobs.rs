@@ -1,5 +1,5 @@
 //! Bounded, cookie-free employer vacancy importer. No credentials sent to sources.
-use super::{browsing, config, db, error::AppError};
+use super::{browsing, config, db, error::AppError, extract::jobs::Classifier};
 use crate::domain::{aliases, skills_in_text};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
@@ -323,6 +323,8 @@ pub const SOURCES: [Source; 48] = [
     },
 ];
 const DAY: Duration = Duration::from_secs(86_400);
+/// Occupation for a vacancy title, or `None` when no catalog occupation fits.
+type TitleOccupation<'a> = dyn Fn(&str) -> Option<Uuid> + Sync + 'a;
 impl Source {
     /// Metered feeds run at most daily and wait a full interval after failures,
     /// so an outage cannot burn the monthly request quota.
@@ -384,7 +386,7 @@ impl Settings {
             }
         };
         let seconds: u64 = std::env::var("JOB_SCRAPE_INTERVAL_SECONDS")
-            .unwrap_or_else(|_| "21600".into())
+            .unwrap_or_else(|_| "7200".into())
             .parse()
             .map_err(|_| std::io::Error::other("Invalid JOB_SCRAPE_INTERVAL_SECONDS"))?;
         if !(3600..=604800).contains(&seconds) {
@@ -394,7 +396,7 @@ impl Settings {
         }
         let google = GoogleJobs::from_env()?;
         let keys = std::env::var("JOB_SCRAPE_SOURCES").unwrap_or_else(|_| {
-            let mut keys = String::from("grab,cermati,dkatalis,softwareseni,kredivo,kalibrr,techinasia,jobstreet,glints,dealls,linkedin,greenhouse-xendit,lever-ninjavan,lever-lalamove,workable-amartha,workable-ajaib,workable-fundingsocieties");
+            let mut keys = String::from("grab,cermati,dkatalis,softwareseni,kredivo,kalibrr,techinasia,jobstreet,glints,dealls,linkedin,greenhouse-xendit,lever-ninjavan,lever-lalamove,workable-amartha,workable-ajaib,workable-fundingsocieties,kitalulus");
             if google.api_key.is_some() {
                 keys.push_str(",openwebninja");
             }
@@ -444,31 +446,6 @@ pub struct Vacancy {
     /// Set by the search queue; employer feeds are classified by title at persist time.
     #[serde(default)]
     pub occupation_id: Option<Uuid>,
-}
-/// Employer feeds carry only software roles; map them to catalog occupation names.
-fn feed_occupation(title: &str) -> &'static str {
-    static DEVOPS: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)devops|devsecops|infraops|site reliability|\bsre\b").unwrap()
-    });
-    static DATA: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)data[ -]?analyst|business intelligence analyst|\bbi analyst").unwrap()
-    });
-    if DEVOPS.is_match(title) {
-        "DevOps Engineer"
-    } else if DATA.is_match(title) {
-        "Data Analyst"
-    } else {
-        "Software Engineer"
-    }
-}
-static ROLE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:software\s+(?:engineer\w*|develop\w*|quality\s+assurance)|data\s+analyst\w*|(?:back[ -]?end|front[ -]?end|full[ -]?stack|mobile|android|ios|web|application)\s+(?:engineer\w*|develop\w*)|(?:[a-z.]+\s+)?developer|devops|devsecops|infraops|site\s+reliability|sre|(?:qa|test|automation)\s+engineer\w*|programmer)\b").unwrap()
-});
-static EXCLUDE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:sales|recruiter|designer|product\s+manager|business\s+developer|business\s+development)\b").unwrap()
-});
-pub fn software(title: &str) -> bool {
-    ROLE.is_match(title) && !EXCLUDE.is_match(title)
 }
 fn text<'a>(v: &'a Value, key: &str) -> &'a str {
     v[key].as_str().unwrap_or("")
@@ -646,11 +623,17 @@ impl Collector {
     async fn json(&self, url: &str) -> Result<Value, AppError> {
         serde_json::from_str(&self.body(url, true).await?).map_err(|_| AppError::Provider)
     }
-    pub async fn collect(&self, source: Source) -> Result<Vec<Vacancy>, AppError> {
+    /// Employer boards list every role; keep only titles that map to a catalog occupation.
+    pub async fn collect(
+        &self,
+        source: Source,
+        classifier: &Classifier,
+    ) -> Result<Vec<Vacancy>, AppError> {
+        let occupation = |title: &str| classifier.occupation(title, None);
         let jobs = match source.provider {
-            Provider::Smart => self.smart(source).await?,
-            Provider::Greenhouse => self.greenhouse(source).await?,
-            Provider::Breezy => self.breezy(source).await?,
+            Provider::Smart => self.smart(source, &occupation).await?,
+            Provider::Greenhouse => self.greenhouse(source, &occupation).await?,
+            Provider::Breezy => self.breezy(source, &occupation).await?,
             Provider::Extract | Provider::GoogleJobs => {
                 return Err(AppError::Invalid(
                     "Metered sources run from the search queue",
@@ -674,7 +657,11 @@ fn checked(source: Source, jobs: Vec<Vacancy>) -> Result<Vec<Vacancy>, AppError>
     Ok(jobs)
 }
 impl Collector {
-    async fn smart(&self, s: Source) -> Result<Vec<Vacancy>, AppError> {
+    async fn smart(
+        &self,
+        s: Source,
+        occupation: &TitleOccupation<'_>,
+    ) -> Result<Vec<Vacancy>, AppError> {
         let mut result = vec![];
         let mut scanned = 0;
         for offset in (0..1000).step_by(100) {
@@ -683,11 +670,12 @@ impl Collector {
             let jobs = data["content"].as_array().ok_or(AppError::Provider)?;
             scanned += jobs.len() as u64;
             for job in jobs {
-                if text(&job["location"], "country").to_lowercase() != "id"
-                    || !software(text(job, "name"))
-                {
+                if text(&job["location"], "country").to_lowercase() != "id" {
                     continue;
                 }
+                let Some(occupation_id) = occupation(text(job, "name")) else {
+                    continue;
+                };
                 let id = identifier(&job["id"]);
                 if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
                     return Err(AppError::Provider);
@@ -703,7 +691,10 @@ impl Collector {
                 {
                     continue;
                 }
-                result.push(smart_record(s, &detail)?);
+                result.push(Vacancy {
+                    occupation_id: Some(occupation_id),
+                    ..smart_record(s, &detail)?
+                });
             }
             if scanned >= total {
                 return Ok(result);
@@ -714,7 +705,11 @@ impl Collector {
         }
         Err(AppError::Invalid("Vacancy pagination exceeds limit"))
     }
-    async fn greenhouse(&self, s: Source) -> Result<Vec<Vacancy>, AppError> {
+    async fn greenhouse(
+        &self,
+        s: Source,
+        occupation: &TitleOccupation<'_>,
+    ) -> Result<Vec<Vacancy>, AppError> {
         let data = self
             .json(&format!(
                 "https://boards-api.greenhouse.io/v1/boards/{}/jobs?content=true",
@@ -724,9 +719,9 @@ impl Collector {
         let jobs = data["jobs"].as_array().ok_or(AppError::Provider)?;
         let mut result = vec![];
         for job in jobs {
-            if !software(text(job, "title")) {
+            let Some(occupation_id) = occupation(text(job, "title")) else {
                 continue;
-            }
+            };
             // Keep only explicitly Indonesian locations; do not infer remote eligibility.
             let location = text(&job["location"], "name");
             let Some(indonesia_location) = location.split(';').find(|part| {
@@ -760,21 +755,28 @@ impl Collector {
                 source_url: text(job, "absolute_url").into(),
                 posted_at: date(&job["first_published"]),
                 valid_until,
-                occupation_id: None,
+                occupation_id: Some(occupation_id),
             });
         }
         Ok(result)
     }
-    async fn breezy(&self, s: Source) -> Result<Vec<Vacancy>, AppError> {
+    async fn breezy(
+        &self,
+        s: Source,
+        occupation: &TitleOccupation<'_>,
+    ) -> Result<Vec<Vacancy>, AppError> {
         let data = self
             .json(&format!("https://{}.breezy.hr/json", s.board))
             .await?;
         let jobs = data.as_array().ok_or(AppError::Provider)?;
         let mut result = vec![];
         for job in jobs {
-            if !software(text(job, "name")) || text(&job["location"]["country"], "id") != "ID" {
+            if text(&job["location"]["country"], "id") != "ID" {
                 continue;
             }
+            let Some(occupation_id) = occupation(text(job, "name")) else {
+                continue;
+            };
             let url = text(job, "url");
             if !allowed_url(s, url) {
                 return Err(AppError::Invalid("Unexpected vacancy URL"));
@@ -814,7 +816,7 @@ impl Collector {
                 source_url: url.into(),
                 posted_at: date(&job["published_date"]),
                 valid_until,
-                occupation_id: None,
+                occupation_id: Some(occupation_id),
             });
         }
         Ok(result)
@@ -1058,10 +1060,9 @@ pub async fn sync_source(
     interval: Duration,
     force: bool,
 ) -> Result<Outcome, AppError> {
+    // Metered quota allows one run a day; every other source follows the configured interval.
     let interval = if source.metered() {
         interval.max(DAY)
-    } else if matches!(source.provider, Provider::Extract) {
-        interval.max(Duration::from_secs(43200))
     } else {
         interval
     };
@@ -1087,14 +1088,16 @@ pub async fn sync_source(
             let batch = next_queries(pool, collector.google.per_run).await?;
             collector.google_jobs(source, &batch).await
         } else {
-            Ok((collector.collect(source).await?, vec![]))
+            let classifier = Classifier::new(&next_queries(pool, 1000).await?);
+            Ok((collector.collect(source, &classifier).await?, vec![]))
         }
     };
     let result = tokio::time::timeout(
+        // Employer boards fetch one detail page per matching role, now across every field.
         Duration::from_secs(if matches!(source.provider, Provider::Extract) {
             1800
         } else {
-            300
+            900
         }),
         collected,
     )
@@ -1169,9 +1172,8 @@ pub(crate) async fn persist(
             &Uuid::NAMESPACE_URL,
             format!("careerbridge:vacancy:{}:{}", source.key, job.source_id).as_bytes(),
         );
-        // A missing catalog occupation leaves occupation_id NULL rather than failing the import.
-        let stored=sqlx::query("INSERT INTO job_vacancies(id,source,source_id,company,title,country,city,region,workplace,employment_type,description,requirements,apply_url,source_url,posted_at,valid_until,last_seen_run,occupation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18,(SELECT id FROM occupations WHERE nama=$19))) ON CONFLICT(source,source_id) DO UPDATE SET company=EXCLUDED.company,title=EXCLUDED.title,country=EXCLUDED.country,city=EXCLUDED.city,region=EXCLUDED.region,workplace=EXCLUDED.workplace,employment_type=EXCLUDED.employment_type,description=CASE WHEN job_vacancies.source='linkedin' AND job_vacancies.detail_complete AND position('Deskripsi lengkap:' in EXCLUDED.description)>0 THEN job_vacancies.description ELSE EXCLUDED.description END,requirements=CASE WHEN job_vacancies.source='linkedin' AND job_vacancies.detail_complete AND position('Deskripsi lengkap:' in EXCLUDED.description)>0 THEN job_vacancies.requirements ELSE EXCLUDED.requirements END,apply_url=EXCLUDED.apply_url,source_url=EXCLUDED.source_url,posted_at=EXCLUDED.posted_at,valid_until=EXCLUDED.valid_until,last_seen_run=EXCLUDED.last_seen_run,occupation_id=COALESCE(EXCLUDED.occupation_id,job_vacancies.occupation_id),last_seen_at=now(),updated_at=now(),status='active' RETURNING description,requirements")
-            .bind(id).bind(source.key).bind(&job.source_id).bind(&job.company).bind(&job.title).bind(&job.country).bind(&job.city).bind(&job.region).bind(&job.workplace).bind(&job.employment_type).bind(&job.description).bind(&job.requirements).bind(&job.apply_url).bind(&job.source_url).bind(job.posted_at).bind(job.valid_until).bind(run).bind(job.occupation_id).bind(feed_occupation(&job.title)).fetch_one(&mut *tx).await?;
+        let stored=sqlx::query("INSERT INTO job_vacancies(id,source,source_id,company,title,country,city,region,workplace,employment_type,description,requirements,apply_url,source_url,posted_at,valid_until,last_seen_run,occupation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT(source,source_id) DO UPDATE SET company=EXCLUDED.company,title=EXCLUDED.title,country=EXCLUDED.country,city=EXCLUDED.city,region=EXCLUDED.region,workplace=EXCLUDED.workplace,employment_type=EXCLUDED.employment_type,description=CASE WHEN job_vacancies.source='linkedin' AND job_vacancies.detail_complete AND position('Deskripsi lengkap:' in EXCLUDED.description)>0 THEN job_vacancies.description ELSE EXCLUDED.description END,requirements=CASE WHEN job_vacancies.source='linkedin' AND job_vacancies.detail_complete AND position('Deskripsi lengkap:' in EXCLUDED.description)>0 THEN job_vacancies.requirements ELSE EXCLUDED.requirements END,apply_url=EXCLUDED.apply_url,source_url=EXCLUDED.source_url,posted_at=EXCLUDED.posted_at,valid_until=EXCLUDED.valid_until,last_seen_run=EXCLUDED.last_seen_run,occupation_id=COALESCE(EXCLUDED.occupation_id,job_vacancies.occupation_id),last_seen_at=now(),updated_at=now(),status='active' RETURNING description,requirements")
+            .bind(id).bind(source.key).bind(&job.source_id).bind(&job.company).bind(&job.title).bind(&job.country).bind(&job.city).bind(&job.region).bind(&job.workplace).bind(&job.employment_type).bind(&job.description).bind(&job.requirements).bind(&job.apply_url).bind(&job.source_url).bind(job.posted_at).bind(job.valid_until).bind(run).bind(job.occupation_id).fetch_one(&mut *tx).await?;
         if source.key == "linkedin" {
             sqlx::query("UPDATE job_vacancies SET detail_complete=position('Deskripsi lengkap:' in description)=0 WHERE id=$1")
                 .bind(id).execute(&mut *tx).await?;
@@ -1441,26 +1443,83 @@ mod tests {
     fn record() -> Vacancy {
         smart_record(SOURCES[0],&json!({"id":"123456","name":"Software Engineer","location":{"country":"id","city":"Jakarta"},"visibility":"PUBLIC","active":true,"postingUrl":"https://jobs.smartrecruiters.com/Grab/123456-software-engineer","applyUrl":"https://jobs.smartrecruiters.com/Grab/123456-software-engineer?oga=true","jobAd":{"sections":{"jobDescription":{"text":"<p>Build APIs</p>"},"qualifications":{"text":"<ul><li>Rust and SQL</li></ul>"}}}})).unwrap()
     }
+    /// Search queue as seeded by migrations: every field's occupation plus the tightened
+    /// Software Engineer pattern. Occupation IDs are derived from names for the assertions.
+    fn seeded_classifier() -> (Classifier, impl Fn(&str) -> Uuid) {
+        let sql = include_str!("../../migrations/202611140001_ai_skills_all_fields.sql");
+        let id = |nama: &str| Uuid::new_v5(&Uuid::NAMESPACE_URL, nama.as_bytes());
+        let row = Regex::new(r"\('([^']+)','\d{4}','[^']+','[^']+','([^']+)','(\(\?i\)[^']+)'\)")
+            .unwrap();
+        let mut queries: Vec<SearchQuery> = row
+            .captures_iter(sql)
+            .map(|c| SearchQuery {
+                id: Uuid::new_v4(),
+                occupation_id: id(&c[1]),
+                keyword: c[2].to_owned(),
+                title_pattern: Some(c[3].to_owned()),
+            })
+            .collect();
+        assert!(queries.len() >= 50, "seeded occupations: {}", queries.len());
+        // The original occupations' patterns, rewritten by the same migration.
+        let rewritten = Regex::new(r"\('([^']+)','\(\?i\)[^']+','(\(\?i\)[^']+)'\)").unwrap();
+        let before = queries.len();
+        queries.extend(rewritten.captures_iter(sql).map(|c| SearchQuery {
+            id: Uuid::new_v4(),
+            occupation_id: id(&c[1]),
+            keyword: c[1].to_lowercase(),
+            title_pattern: Some(c[2].to_owned()),
+        }));
+        assert_eq!(queries.len() - before, 11);
+        for q in &queries {
+            let p = q.title_pattern.as_deref().unwrap();
+            Regex::new(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        }
+        (Classifier::new(&queries), id)
+    }
     #[test]
-    fn filters_software_roles_and_preserves_application_links() {
-        for title in [
-            "Software Engineer Intern",
-            "Software Quality Assurance - Manual Testing (Senior)",
-            "Senior Node.js Developer",
-            "Android Engineer - SDE 2",
-            "Software QA Engineer (Automation)",
-            "DevOps Engineer",
+    fn classifies_titles_of_every_field_and_preserves_application_links() {
+        let (classifier, id) = seeded_classifier();
+        for (title, occupation) in [
+            ("Perawat ICU", "Perawat"),
+            ("Asisten Apoteker", "Asisten Apoteker"),
+            ("Apoteker Penanggung Jawab", "Apoteker"),
+            ("Civil Engineer", "Insinyur Sipil"),
+            ("Admin Gudang", "Staf Gudang"),
+            ("Account Executive", "Sales Executive"),
+            ("Sales Engineer", "Sales Executive"),
+            ("Analis Kredit UMKM", "Analis Kredit"),
+            ("Driver Pribadi", "Pengemudi"),
+            ("Barista", "Barista"),
+            ("Fisioterapis", "Fisioterapis"),
+            ("Guru Matematika SMA", "Guru"),
+            ("Senior Backend Engineer", "Software Engineer"),
+            ("Software QA Engineer (Automation)", "Software Engineer"),
+            ("Senior Node.js Developer", "Software Engineer"),
+            ("Senior Security Engineer, Red Team", "Software Engineer"),
+            ("Frontend Web Developer", "Web Developer"),
+            ("Senior Data Engineer", "Data Analyst"),
+            ("Business Intelligence Analyst", "Data Analyst"),
+            ("Site Reliability Engineer", "DevOps Engineer"),
+            ("IT Support Staff", "IT Support"),
+            ("UX Researcher", "UI/UX Designer"),
+            ("Customer Service Representative", "Customer Service"),
+            ("Staff Administrasi", "Staf Administrasi"),
+            ("Accounting Staff", "Staf Akuntansi"),
+            ("Operator Produksi", "Operator Produksi"),
+            ("Social Media Specialist", "Digital Marketing"),
         ] {
-            assert!(software(title), "{title}");
+            assert_eq!(
+                classifier.occupation(title, None),
+                Some(id(occupation)),
+                "{title}"
+            );
         }
         for title in [
-            "Product Manager - Developer Experience",
-            "Business Developer",
-            "Sales Engineer",
             "Mechanical Engineer",
-            "UX Designer",
+            "Identity Management Engineer",
+            "Key Account Manager",
         ] {
-            assert!(!software(title), "{title}");
+            assert_eq!(classifier.occupation(title, None), None, "{title}");
         }
         let job = record();
         job.validate(SOURCES[0]).unwrap();
@@ -1563,7 +1622,7 @@ mod tests {
         assert!(relative_date("kemarin", now).is_none());
     }
     #[test]
-    fn seeded_title_patterns_compile_and_feed_titles_map_to_occupations() {
+    fn seeded_title_patterns_compile() {
         let sql = include_str!("../../migrations/202611080004_openwebninja_source.sql");
         let patterns: Vec<_> = Regex::new(r"'(\(\?i\)[^']*)'")
             .unwrap()
@@ -1574,10 +1633,6 @@ mod tests {
         for p in &patterns {
             Regex::new(p).unwrap_or_else(|e| panic!("{p}: {e}"));
         }
-        assert_eq!(feed_occupation("Senior DevOps Engineer"), "DevOps Engineer");
-        assert_eq!(feed_occupation("SRE II"), "DevOps Engineer");
-        assert_eq!(feed_occupation("Data Analyst Operations"), "Data Analyst");
-        assert_eq!(feed_occupation("Backend Developer"), "Software Engineer");
     }
     #[test]
     fn rejects_unbounded_pages_and_unknown_sources() {

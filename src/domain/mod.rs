@@ -126,6 +126,9 @@ pub struct RawOccupationSuggestion {
     pub deskripsi: String,
     pub wajib: Vec<usize>,
     pub opsional: Vec<usize>,
+    /// Skills the job needs that the offered catalog lacks, named by the provider.
+    pub wajib_baru: Vec<String>,
+    pub opsional_baru: Vec<String>,
 }
 /// Catalog entry offered to the provider; its position in the slice is its prompt index.
 pub struct CatalogOption<'a> {
@@ -136,6 +139,11 @@ fn clean_text(text: &str, min: usize, max: usize) -> Option<String> {
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let len = text.chars().count();
     (min..=max).contains(&len).then_some(text)
+}
+/// A provider-proposed skill or field name: 2 to 80 characters with a letter and no control characters.
+pub fn clean_label(text: &str) -> Option<String> {
+    clean_text(text, 2, 80)
+        .filter(|t| t.chars().any(char::is_alphabetic) && !t.chars().any(char::is_control))
 }
 /// Returns `None` when the answer is unsupported by the CV, low-confidence or malformed.
 /// `cv_terms` are the exact experience titles and skill phrases the provider received.
@@ -176,10 +184,7 @@ pub fn validate_occupation_suggestion(
             evidence,
         });
     }
-    let nama = clean_text(&raw.nama, 2, 80)?;
-    if nama.chars().any(char::is_control) || !nama.chars().any(char::is_alphabetic) {
-        return None;
-    }
+    let nama = clean_label(&raw.nama)?;
     // Same name as a catalog occupation means the provider missed the match; reuse the catalog row.
     if let Some(o) = occupations
         .iter()
@@ -875,6 +880,8 @@ mod occupation_suggestion_tests {
             deskripsi: "Merancang dan mengelola infrastruktur di layanan cloud.".into(),
             wajib: vec![0, 1, 2],
             opsional: vec![3],
+            wajib_baru: vec![],
+            opsional_baru: vec![],
         }
     }
     fn check(raw: &RawOccupationSuggestion) -> Option<OccupationSuggestion> {

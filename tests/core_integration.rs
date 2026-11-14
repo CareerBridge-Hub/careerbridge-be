@@ -419,7 +419,7 @@ async fn core_flow_is_isolated_recoverable_and_cache_aware() {
     )
     .await;
     assert_eq!(page["items"].as_array().unwrap().len(), 2);
-    assert_eq!(page["total"], 66);
+    assert_eq!(page["total"], 240);
     db::validate_runtime_role(&s.pool, "careerbridge_api")
         .await
         .unwrap();

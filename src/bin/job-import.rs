@@ -1,6 +1,9 @@
 //! Use --preview, --once [--force], --daemon, --status, --retag, or --test-query "<keyword>" ["<title regex>"].
 //! Never needs Supabase Auth/LLM secrets.
-use careerbridge_be::infrastructure::jobs::{self, Collector, Settings};
+use careerbridge_be::infrastructure::{
+    extract::jobs::Classifier,
+    jobs::{self, Collector, Settings},
+};
 use std::io::Write;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,6 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("--preview") if args.len() == 1 => {
             let collector = Collector::new(settings.google.clone())?;
+            // Titles are classified with the database search queue (read only).
+            let classifier =
+                Classifier::new(&jobs::next_queries(&jobs::importer_pool().await?, 1000).await?);
             let mut jobs = vec![];
             // Metered sources cost quota and need the DB queue; use --test-query instead.
             for source in settings
@@ -39,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .iter()
                 .filter(|s| !s.metered() && !matches!(s.provider, jobs::Provider::Extract))
             {
-                jobs.extend(collector.collect(*source).await?);
+                jobs.extend(collector.collect(*source, &classifier).await?);
             }
             std::fs::create_dir_all(".cache/software-jobs")?;
             let path = ".cache/software-jobs/indonesia-expanded.csv";

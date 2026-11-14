@@ -189,7 +189,7 @@ jobs:
           : "${JOB_SCRAPE_ENABLED:=true}"
           : "${LPK_SCRAPE_ENABLED:=true}"
           : "${LPK_SCOPE:=published}"
-          : "${JOB_SCRAPE_INTERVAL_SECONDS:=21600}"
+          : "${JOB_SCRAPE_INTERVAL_SECONDS:=7200}"
           # An empty secret uses the Rust registry defaults (including all former Python DB sources).
           # OpenWebNinja remains opt-in automatically when its API key is present.
           if [ -z "$JOB_SCRAPE_SOURCES" ]; then unset JOB_SCRAPE_SOURCES; fi

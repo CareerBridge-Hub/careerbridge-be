@@ -13,7 +13,7 @@ async-trait = "0.1"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
-fastembed = { version = "=7.5.0", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
+fastembed = { version = "=7.6.1", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
 futures-util = "0.3"
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs"] }
 pdf-extract = "0.12.1"

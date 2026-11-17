@@ -316,6 +316,23 @@ async fn own_occupation_is_private_scored_and_mapped_to_catalog_vacancies() {
         .unwrap();
     assert_eq!(still, renamed);
 
+    // An existing category is reused with its stored spelling, never added as a variant.
+    let bidang: String = sqlx::query_scalar(
+        "UPDATE occupations SET bidang='  fIXTURE  ' WHERE id=$1 RETURNING bidang",
+    )
+    .bind(id)
+    .fetch_one(&owner)
+    .await
+    .unwrap();
+    assert_eq!(bidang, "Fixture");
+    let kategori: String =
+        sqlx::query_scalar("UPDATE skills SET kategori=' tEST ' WHERE id=$1 RETURNING kategori")
+            .bind(f.a)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(kategori, "Test");
+
     cleanup(&owner, &f).await;
     let gone: i64 = sqlx::query_scalar("SELECT count(*) FROM occupations WHERE id=$1")
         .bind(id)

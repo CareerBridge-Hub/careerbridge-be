@@ -1,10 +1,10 @@
 # procoder handoff
 
 <!-- procoder:facts -->
-generated: 2026-11-14T18:54:47Z
+generated: 2026-11-17T14:13:38Z
 branch: main — this is the default branch
-head: ec919aa
-dirty files: 2
+head: 4a0e8f0
+dirty files: 4
 sprint: none — no backlog yet (`procoder backlog` starts one)
 open tasks: none
 unlearned lessons: none — no ledger at .procoder/github/LESSONS.md

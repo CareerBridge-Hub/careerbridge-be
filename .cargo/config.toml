@@ -1,5 +1,3 @@
 [env]
 # Windows: aws-lc-sys needs NASM; use its prebuilt objects instead.
 AWS_LC_SYS_PREBUILT_NASM = "1"
-# Supabase DB uses verify-full; its CA is not in the default root store.
-PGSSLROOTCERT = { value = "certs/supabase-root-2021.crt", relative = true }

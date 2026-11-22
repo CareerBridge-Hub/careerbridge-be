@@ -1,9 +1,9 @@
 # procoder handoff
 
 <!-- procoder:facts -->
-generated: 2026-11-22T13:01:03Z
+generated: 2026-11-22T13:07:45Z
 branch: main — this is the default branch
-head: 5b883d5
+head: bb6f74b
 dirty files: 1
 sprint: none — no backlog yet (`procoder backlog` starts one)
 open tasks: none
